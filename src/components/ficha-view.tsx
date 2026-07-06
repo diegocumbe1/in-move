@@ -4,9 +4,20 @@ import { useState } from 'react';
 import { FichaDocument, type FichaData } from './ficha-document';
 import { FichaComparison } from './ficha-comparison';
 import { FichaToolbar } from './ficha-toolbar';
-import type { IndicatorComparison } from '@/lib/comparison';
+import type { IndicatorComparison, RadarAxis } from '@/lib/comparison';
+import type { Rom } from '@/lib/ficha';
 
-export function FichaView({ data, comparisons }: { data: FichaData; comparisons: IndicatorComparison[] }) {
+export function FichaView({
+  data,
+  comparisons,
+  radar,
+  rom,
+}: {
+  data: FichaData;
+  comparisons: IndicatorComparison[];
+  radar: RadarAxis[];
+  rom?: Rom | null;
+}) {
   const [tab, setTab] = useState<'ficha' | 'comp'>('ficha');
 
   const tabBtn = (active: boolean) =>
@@ -32,7 +43,7 @@ export function FichaView({ data, comparisons }: { data: FichaData; comparisons:
         <FichaDocument data={data} />
       </div>
       <div className={`${tab === 'comp' ? 'block' : 'hidden'} ficha-print print:block print:break-before-page`}>
-        <FichaComparison comparisons={comparisons} />
+        <FichaComparison comparisons={comparisons} radar={radar} rom={rom} />
       </div>
     </div>
   );

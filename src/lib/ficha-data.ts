@@ -23,6 +23,7 @@ export async function getFichaData(assessmentId: string): Promise<FichaData | nu
     sport: ath.sport,
     photoUrl: publicPhotoUrl(ath.photoPath),
     assessedOn: row.assessedOn,
+    updatedAt: row.updatedAt?.toISOString(),
     age: chronologicalAge(ath.birthDate, row.assessedOn),
     anthropometry: row.anthropometry,
     cardio: row.cardio,

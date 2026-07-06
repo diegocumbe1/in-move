@@ -2,7 +2,7 @@
 
 import { and, desc, eq } from 'drizzle-orm';
 import { db } from '@/db';
-import { athletes, assessments, catalogItems } from '@/db/schema';
+import { athletes, assessments, catalogItems, appSettings } from '@/db/schema';
 import { buildAssessment, deriveStatus } from '@/lib/scales';
 import { emptyAssessment, generateCode, todayIso } from '@/lib/mock-product';
 import type { Athlete, ProductSettings } from '@/lib/mock-product';
@@ -61,11 +61,16 @@ async function toAthlete(
   };
 }
 
-export async function getInitialData(): Promise<{ athletes: Athlete[]; settings: ProductSettings }> {
-  const [athleteRows, assessmentRows, catalogRows] = await Promise.all([
+export async function getInitialData(): Promise<{
+  athletes: Athlete[];
+  settings: ProductSettings;
+  fichaTheme: 'light' | 'dark';
+}> {
+  const [athleteRows, assessmentRows, catalogRows, fichaTheme] = await Promise.all([
     db.select().from(athletes).orderBy(desc(athletes.createdAt)),
     db.select().from(assessments),
     db.select().from(catalogItems).orderBy(catalogItems.sort),
+    getFichaTheme(),
   ]);
 
   // Todas las valoraciones por deportista, más recientes primero.
@@ -93,7 +98,7 @@ export async function getInitialData(): Promise<{ athletes: Athlete[]; settings:
     positions: byKind('position'),
   };
 
-  return { athletes: mapped, settings };
+  return { athletes: mapped, settings, fichaTheme };
 }
 
 export async function createAthlete(input: NewAthleteInput): Promise<Athlete> {
@@ -198,7 +203,9 @@ export async function saveAssessment(
       saltoUnilateralIzqCm: num(draft.saltoUniIzq),
       fuerzaMaximaKg: num(draft.fuerzaMax),
       sentadilla1rmKg: num(draft.squat1rm),
+      sentadillaSeg: num(draft.squatSeg),
       pressBanca1rmKg: num(draft.banca1rm),
+      pressBancaSeg: num(draft.bancaSeg),
       pct1rmSentadilla: num(draft.pct1rm),
       velocidad10mS: num(draft.speed10m),
       velocidad30mS: num(draft.speed30m),
@@ -225,6 +232,20 @@ export async function saveAssessment(
 }
 
 // ---- Catálogos (variables editables por el admin) ----
+
+// ---- Tema de la ficha (claro / oscuro) ----
+
+export async function getFichaTheme(): Promise<'light' | 'dark'> {
+  const [row] = await db.select().from(appSettings).where(eq(appSettings.key, 'ficha_theme')).limit(1);
+  return row?.value === 'dark' ? 'dark' : 'light';
+}
+
+export async function setFichaTheme(theme: 'light' | 'dark'): Promise<void> {
+  await db
+    .insert(appSettings)
+    .values({ key: 'ficha_theme', value: theme })
+    .onConflictDoUpdate({ target: appSettings.key, set: { value: theme } });
+}
 
 export async function addCatalogItem(kind: CatalogKind, label: string): Promise<void> {
   const clean = label.trim();

@@ -60,7 +60,9 @@ export const performanceSchema = z.object({
   saltoUnilateralIzqCm: z.number().optional(),
   fuerzaMaximaKg: z.number().optional(),
   sentadilla1rmKg: z.number().optional(),
+  sentadillaSeg: z.number().optional(), // tiempo de ejecución (explosividad, encoder)
   pressBanca1rmKg: z.number().optional(),
+  pressBancaSeg: z.number().optional(),
   pct1rmSentadilla: z.number().optional(),
   velocidad10mS: z.number().optional(),
   velocidad30mS: z.number().optional(),
@@ -79,3 +81,5 @@ export type Sex = (typeof SEXES)[number];
 
 export const CATALOG_KINDS = ['category', 'group', 'sport', 'position'] as const;
 export type CatalogKind = (typeof CATALOG_KINDS)[number];
+
+export type FichaTheme = 'light' | 'dark';

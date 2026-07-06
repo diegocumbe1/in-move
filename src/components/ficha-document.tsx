@@ -1,4 +1,9 @@
+'use client';
+
+import { Fragment, useState } from 'react';
+import Image from 'next/image';
 import type { Anthropometry, Cardio, Flexibility, Performance, Rom } from '@/lib/ficha';
+import { bmi, biologicalAge, explosiveness } from '@/lib/scales';
 
 /**
  * Documento de la FICHA DE VALORACIÓN IN MOVE — branding verde, estructurado
@@ -17,6 +22,7 @@ export type FichaData = {
   sport?: string | null;
   photoUrl?: string | null;
   assessedOn: string;
+  updatedAt?: string | null;
   age: number | null;
   anthropometry?: Anthropometry | null;
   cardio?: Cardio | null;
@@ -29,7 +35,16 @@ export type FichaData = {
 
 const fmtDate = (iso: string) => {
   if (!iso) return '—';
-  const [y, m, d] = iso.split('-');
+  if (iso.includes('T')) {
+    return new Intl.DateTimeFormat('es-CO', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      timeZone: 'America/Bogota',
+    }).format(new Date(iso));
+  }
+  const [date] = iso.split('T');
+  const [y, m, d] = date.split('-');
   return `${d}/${m}/${y}`;
 };
 const val = (v: number | string | null | undefined, suffix = '') =>
@@ -37,25 +52,101 @@ const val = (v: number | string | null | undefined, suffix = '') =>
 
 function Field({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-stretch overflow-hidden rounded-md border border-green-300">
-      <span className="flex w-2/5 items-center bg-green-100 px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-green-800">
+    <div className="flex items-stretch overflow-hidden rounded-md border border-[var(--fc-line)]">
+      <span className="flex w-2/5 items-center bg-[var(--fc-label-bg)] px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-[var(--fc-label-ink)]">
         {label}
       </span>
-      <span className="flex flex-1 items-center bg-white px-3 py-2 text-sm font-semibold text-gray-900">{value}</span>
+      <span className="flex flex-1 items-center bg-[var(--fc-card)] px-3 py-2 text-sm font-semibold text-[var(--fc-ink)]">{value}</span>
     </div>
   );
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
-  return <h2 className="mt-6 mb-2 text-sm font-extrabold uppercase tracking-wide text-green-700">{children}</h2>;
+  return <h2 className="mt-4 mb-2 text-sm font-extrabold uppercase tracking-wide text-[var(--fc-accent)]">{children}</h2>;
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-md border border-green-300 bg-white">
-      <div className="bg-green-100 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-green-800">{label}</div>
-      <div className="px-3 py-2 text-lg font-bold text-gray-900">{value}</div>
+    <div className="rounded-md border border-[var(--fc-line)] bg-[var(--fc-card)]">
+      <div className="bg-[var(--fc-label-bg)] px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-[var(--fc-label-ink)]">{label}</div>
+      <div className="px-3 py-2 text-lg font-bold text-[var(--fc-ink)]">{value}</div>
     </div>
+  );
+}
+
+function JointCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="overflow-hidden rounded-lg border border-[var(--fc-line)] bg-[var(--fc-card)]">
+      <div className="bg-green-700 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-white">{title}</div>
+      <div className="p-3">{children}</div>
+    </div>
+  );
+}
+
+function AthletePhoto({ src, alt }: { src?: string | null; alt: string }) {
+  const [loaded, setLoaded] = useState(false);
+
+  return (
+    <div className="relative grid aspect-[4/5] w-full place-items-center overflow-hidden rounded-lg border-2 border-[var(--fc-line)] bg-[var(--fc-card-2)] shadow-sm">
+      {src ? (
+        <>
+          {!loaded ? <div className="absolute inset-0 animate-pulse bg-gradient-to-br from-green-100 via-white to-green-50" aria-hidden /> : null}
+          <Image
+            src={src}
+            alt={alt}
+            fill
+            priority
+            sizes="(min-width: 640px) 240px, calc(100vw - 2rem)"
+            className={`object-cover transition-opacity duration-300 ${loaded ? 'opacity-100' : 'opacity-0'}`}
+            onLoad={() => setLoaded(true)}
+          />
+        </>
+      ) : (
+        <span className="text-sm text-[var(--fc-accent)]">Sin foto</span>
+      )}
+    </div>
+  );
+}
+
+/** Tarjeta ROM unilateral (ej. Columna: flexión/extensión). */
+function SingleJoint({ title, rows }: { title: string; rows: { label: string; value?: number | null }[] }) {
+  return (
+    <JointCard title={title}>
+      <div className="space-y-1.5">
+        {rows.map((row) => (
+          <div key={row.label} className="flex items-center justify-between text-sm">
+            <span className="text-[var(--fc-muted)]">{row.label}</span>
+            <span className="font-bold tabular-nums text-[var(--fc-ink)]">{val(row.value, '°')}</span>
+          </div>
+        ))}
+      </div>
+    </JointCard>
+  );
+}
+
+/** Tarjeta ROM bilateral con columnas Izq/Der y aviso de asimetría (≥10°). */
+function BilateralJoint({ title, rows }: { title: string; rows: { label: string; izq?: number | null; der?: number | null }[] }) {
+  return (
+    <JointCard title={title}>
+      <div className="grid grid-cols-[1fr_auto_auto] items-center gap-x-4 gap-y-1.5">
+        <span />
+        <span className="text-center text-[10px] font-bold uppercase text-[var(--fc-muted)]">Izq</span>
+        <span className="text-center text-[10px] font-bold uppercase text-[var(--fc-muted)]">Der</span>
+        {rows.map((row) => {
+          const asym = row.izq != null && row.der != null && Math.abs(row.izq - row.der) >= 10;
+          return (
+            <Fragment key={row.label}>
+              <span className="flex items-center gap-1.5 text-sm text-[var(--fc-muted)]">
+                {row.label}
+                {asym ? <span className="size-1.5 rounded-full bg-amber-500" title="Asimetría" /> : null}
+              </span>
+              <span className="text-center text-sm font-bold tabular-nums text-[var(--fc-ink)]">{val(row.izq)}</span>
+              <span className="text-center text-sm font-bold tabular-nums text-[var(--fc-ink)]">{val(row.der)}</span>
+            </Fragment>
+          );
+        })}
+      </div>
+    </JointCard>
   );
 }
 
@@ -66,70 +157,82 @@ export function FichaDocument({ data }: { data: FichaData }) {
   const f = data.flexibility ?? {};
   const p = data.performance ?? {};
 
-  const romRows: { label: string; value: string }[] = [
-    { label: 'Columna', value: `Flexión: ${val(r.columnaFlexion)}  ·  Extensión: ${val(r.columnaExtension)}` },
-    {
-      label: 'Hombros',
-      value: `Rot. int I/D: ${val(r.hombroRotIntIzq)}/${val(r.hombroRotIntDer)}  ·  Rot. ext I/D: ${val(r.hombroRotExtIzq)}/${val(r.hombroRotExtDer)}  ·  Flex I/D: ${val(r.hombroFlexionIzq)}/${val(r.hombroFlexionDer)}`,
-    },
-    { label: 'Cadera', value: `Flexión  IZQ: ${val(r.caderaFlexionIzq)}   DER: ${val(r.caderaFlexionDer)}` },
-    { label: 'Rodilla', value: `Flexión  IZQ: ${val(r.rodillaFlexionIzq)}   DER: ${val(r.rodillaFlexionDer)}` },
-    { label: 'Sit and Reach Test', value: val(f.resultadoCm, ' cm') },
-  ];
+  const imc = bmi(a.pesoKg, a.estaturaCm);
+  const bioAge = biologicalAge(data.sex, data.birthDate, data.assessedOn, a.estaturaCm);
+  const explSquat = explosiveness(p.sentadilla1rmKg, p.sentadillaSeg);
+  const explBench = explosiveness(p.pressBanca1rmKg, p.pressBancaSeg);
 
   return (
-    <div className="mx-auto w-full max-w-[900px] rounded-2xl border-2 border-green-600 bg-white p-5 text-gray-900 md:p-7">
+    <div className="mx-auto w-full max-w-[900px] rounded-2xl border-2 border-green-600 bg-[var(--fc-card)] p-4 text-[var(--fc-ink)] md:p-6">
       {/* Header */}
       <div className="flex items-center gap-4 rounded-lg bg-green-700 px-4 py-3">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo.jpg" alt="In Move" className="size-14 shrink-0 rounded-full bg-white object-cover ring-2 ring-white/40" />
+        <img src="/logo.jpg" alt="In Move" className="size-14 shrink-0 rounded-full bg-[var(--fc-card)] object-cover ring-2 ring-white/40" />
         <h1 className="flex-1 text-center text-lg font-extrabold uppercase tracking-wide text-white md:text-xl">
           Ficha de Valoración In Move
         </h1>
         <span className="size-14 shrink-0" aria-hidden />
       </div>
 
-      <div className="mt-5 grid gap-5 sm:grid-cols-[1fr_130px]">
-        <div className="grid gap-2">
+      <div className="mt-4 grid gap-4 sm:grid-cols-[1fr_240px]">
+        <div className="grid gap-1.5">
           <Field label="Nombre del deportista" value={data.name} />
           <Field label="Documento de identidad" value={data.document} />
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid gap-1.5 sm:grid-cols-2">
             <Field label="Fecha de nacimiento" value={fmtDate(data.birthDate)} />
             <Field label="Edad" value={data.age == null ? '—' : `${data.age} años`} />
           </div>
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid gap-1.5 sm:grid-cols-2">
             <Field label="Fecha de valoración" value={fmtDate(data.assessedOn)} />
             <Field label="Código" value={data.code} />
           </div>
-        </div>
-        <div className="flex flex-col items-center">
-          <div className="grid h-[150px] w-[120px] place-items-center overflow-hidden rounded-md border border-green-300 bg-green-50">
-            {data.photoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={data.photoUrl} alt={data.name} className="h-full w-full object-cover" />
-            ) : (
-              <span className="text-xs text-green-700">Sin foto</span>
-            )}
+          <div className="grid gap-1.5 sm:grid-cols-2">
+            <Field label="Edad biológica est." value={bioAge == null ? '—' : `${bioAge.toFixed(1)} años`} />
+            <Field label="IMC" value={imc == null ? '—' : imc.toFixed(1)} />
           </div>
         </div>
+        <AthletePhoto src={data.photoUrl} alt={data.name} />
       </div>
 
       <SectionTitle>Indicadores de rendimiento</SectionTitle>
-      <div className="grid gap-2 sm:grid-cols-4">
+      <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-5">
         <Metric label="Peso (kg)" value={val(a.pesoKg)} />
         <Metric label="Estatura (cm)" value={val(a.estaturaCm)} />
+        <Metric label="IMC" value={imc == null ? '—' : imc.toFixed(1)} />
         <Metric label="% Grasa" value={val(a.pctGrasa, ' %')} />
         <Metric label="% Masa corporal" value={val(a.pctMasa, ' %')} />
       </div>
 
-      <SectionTitle>Valoración de movilidad y flexibilidad (ROM)</SectionTitle>
-      <div className="overflow-hidden rounded-md border border-green-300">
-        {romRows.map((row, i) => (
-          <div key={row.label} className={`grid grid-cols-[140px_1fr] ${i > 0 ? 'border-t border-green-200' : ''}`}>
-            <div className="bg-green-100 px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-green-800">{row.label}</div>
-            <div className="bg-white px-3 py-2 text-sm text-gray-900">{row.value}</div>
-          </div>
-        ))}
+      <SectionTitle>Movilidad articular (ROM · grados)</SectionTitle>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <SingleJoint
+          title="Columna"
+          rows={[
+            { label: 'Flexión', value: r.columnaFlexion },
+            { label: 'Extensión', value: r.columnaExtension },
+          ]}
+        />
+        <BilateralJoint
+          title="Hombros"
+          rows={[
+            { label: 'Rotación interna', izq: r.hombroRotIntIzq, der: r.hombroRotIntDer },
+            { label: 'Rotación externa', izq: r.hombroRotExtIzq, der: r.hombroRotExtDer },
+            { label: 'Flexión', izq: r.hombroFlexionIzq, der: r.hombroFlexionDer },
+          ]}
+        />
+        <BilateralJoint title="Cadera" rows={[{ label: 'Flexión', izq: r.caderaFlexionIzq, der: r.caderaFlexionDer }]} />
+        <BilateralJoint title="Rodilla" rows={[{ label: 'Flexión', izq: r.rodillaFlexionIzq, der: r.rodillaFlexionDer }]} />
+        {r.otraLabel ? <SingleJoint title={r.otraLabel} rows={[{ label: 'Valor', value: r.otraValor }]} /> : null}
+      </div>
+      <p className="mt-2 text-[11px] text-[var(--fc-muted)]">
+        <span className="mr-1 inline-block size-1.5 rounded-full bg-amber-500 align-middle" /> Asimetría izquierda/derecha ≥ 10°.
+      </p>
+
+      <SectionTitle>Flexibilidad</SectionTitle>
+      <div className="grid gap-2 sm:grid-cols-3">
+        <Metric label="Prueba aplicada" value={f.pruebaAplicada || 'Sit and Reach'} />
+        <Metric label="Resultado" value={val(f.resultadoCm, ' cm')} />
+        <Metric label="Observación" value={f.observacion || '—'} />
       </div>
 
       <SectionTitle>Control cardiovascular</SectionTitle>
@@ -147,8 +250,10 @@ export function FichaDocument({ data }: { data: FichaData }) {
         <Metric label="Abalakov (cm)" value={val(p.abalakovCm)} />
         <Metric label="Salto unilat. I/D (cm)" value={`${val(p.saltoUnilateralIzqCm)} / ${val(p.saltoUnilateralDerCm)}`} />
         <Metric label="Fuerza máxima (kg)" value={val(p.fuerzaMaximaKg)} />
-        <Metric label="Sentadilla 1RM (kg)" value={val(p.sentadilla1rmKg)} />
-        <Metric label="Press banca 1RM (kg)" value={val(p.pressBanca1rmKg)} />
+        <Metric label="Sentadilla (carga · tiempo)" value={`${val(p.sentadilla1rmKg, ' kg')} · ${val(p.sentadillaSeg, ' s')}`} />
+        <Metric label="Explosividad sentadilla" value={explSquat == null ? '—' : `${explSquat.toFixed(1)} kg/s`} />
+        <Metric label="Press banca (carga · tiempo)" value={`${val(p.pressBanca1rmKg, ' kg')} · ${val(p.pressBancaSeg, ' s')}`} />
+        <Metric label="Explosividad banca" value={explBench == null ? '—' : `${explBench.toFixed(1)} kg/s`} />
         <Metric label="% 1RM sentadilla" value={val(p.pct1rmSentadilla, ' %')} />
       </div>
 
@@ -160,16 +265,18 @@ export function FichaDocument({ data }: { data: FichaData }) {
       </div>
 
       <SectionTitle>Observaciones generales</SectionTitle>
-      <div className="min-h-[56px] rounded-md border border-green-300 bg-white px-3 py-2 text-sm text-gray-900">
+      <div className="min-h-[56px] rounded-md border border-[var(--fc-line)] bg-[var(--fc-card)] px-3 py-2 text-sm text-[var(--fc-ink)]">
         {data.observations || '—'}
       </div>
 
       <SectionTitle>Plan de intervención</SectionTitle>
-      <div className="min-h-[56px] rounded-md border border-green-300 bg-white px-3 py-2 text-sm text-gray-900">
+      <div className="min-h-[56px] rounded-md border border-[var(--fc-line)] bg-[var(--fc-card)] px-3 py-2 text-sm text-[var(--fc-ink)]">
         {data.plan || '—'}
       </div>
 
-      <p className="mt-5 text-center text-[11px] text-green-700">In Move · Centro de Evaluación y Rendimiento · Código {data.code}</p>
+      <p className="mt-5 text-center text-[11px] text-[var(--fc-accent)]">
+        In Move · Centro de Evaluación y Rendimiento · Fecha valoración {fmtDate(data.updatedAt || data.assessedOn)} · Código {data.code}
+      </p>
     </div>
   );
 }

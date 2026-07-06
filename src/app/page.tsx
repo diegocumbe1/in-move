@@ -55,7 +55,7 @@ import * as api from '@/lib/actions';
 import { uploadAthletePhoto } from '@/lib/upload';
 import { createClient as createSupabaseClient } from '@/lib/supabase/client';
 import type { AssessmentDraftInput } from '@/lib/form-types';
-import type { CatalogKind } from '@/lib/ficha';
+import type { CatalogKind, FichaTheme } from '@/lib/ficha';
 
 const viewItems: Array<{ id: ViewId; label: string; icon: typeof UsersRound }> = [
   { id: 'athletes', label: 'Deportistas', icon: UsersRound },
@@ -183,6 +183,7 @@ export default function MockMvpApp() {
   const [detailId, setDetailId] = useState<string | null>(null);
   const [formAssessment, setFormAssessment] = useState<Assessment | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [fichaTheme, setFichaThemeState] = useState<FichaTheme>('light');
 
   useEffect(() => {
     let active = true;
@@ -192,6 +193,7 @@ export default function MockMvpApp() {
         if (!active) return;
         setMockAthletes(data.athletes);
         setSettings(data.settings);
+        setFichaThemeState(data.fichaTheme);
         setSelectedId((current) => current || data.athletes[0]?.id || '');
         setLoading(false);
       })
@@ -261,6 +263,12 @@ export default function MockMvpApp() {
     const data = await api.getInitialData();
     setMockAthletes(data.athletes);
     setSettings(data.settings);
+    setFichaThemeState(data.fichaTheme);
+  }
+
+  async function changeFichaTheme(theme: FichaTheme) {
+    setFichaThemeState(theme);
+    await api.setFichaTheme(theme);
   }
 
   async function saveAssessmentDraft(athleteId: string, draft: AssessmentDraftInput, assessmentId?: string) {
@@ -393,7 +401,7 @@ export default function MockMvpApp() {
                       ? 'Valoracion tablet-first'
                       : view === 'dashboard'
                         ? 'Dashboard operativo'
-                        : 'Settings del mock'}
+                        : 'Settings'}
                 </h1>
               </div>
               <div className="flex items-center gap-2">
@@ -452,7 +460,7 @@ export default function MockMvpApp() {
             ) : null}
           </header>
 
-          <main className="flex-1 px-4 py-4 pb-[calc(var(--safe-bottom)+5.5rem)] md:px-6 md:py-6 lg:px-8 xl:pb-8">
+          <main className="flex-1 px-4 py-4 pb-[calc(var(--safe-bottom)+9rem)] md:px-6 md:py-6 md:pb-[calc(var(--safe-bottom)+9.5rem)] lg:px-8 xl:pb-8">
             {isPublicView ? (
               <div className="mx-auto grid max-w-6xl gap-4">
                 <div className="flex items-center justify-between gap-3 print:hidden">
@@ -508,12 +516,18 @@ export default function MockMvpApp() {
             ) : view === 'dashboard' ? (
               <DashboardView athletes={mockAthletes} />
             ) : view === 'settings' ? (
-              <SettingsView settings={settings} onReload={reload} />
+              <SettingsView
+                settings={settings}
+                onReload={reload}
+                fichaTheme={fichaTheme}
+                onFichaTheme={changeFichaTheme}
+                sampleFichaId={mockAthletes.find((a) => a.assessments.some((s) => s.id))?.assessments.find((s) => s.id)?.id}
+              />
             ) : null}
           </main>
 
           {isAdmin ? (
-          <nav className="fixed inset-x-4 bottom-4 z-40 grid grid-cols-4 gap-2 rounded-[999px] border border-white/10 bg-surface/90 p-2 shadow-float backdrop-blur xl:hidden print:hidden">
+          <nav className="fixed inset-x-4 bottom-[calc(var(--safe-bottom)+1rem)] z-40 grid grid-cols-3 gap-2 rounded-[999px] border border-white/10 bg-surface/90 p-2 shadow-float backdrop-blur xl:hidden print:hidden">
             {viewItems.map((item) => {
               const Icon = item.icon;
               const active = view === item.id;
@@ -753,6 +767,10 @@ function AthleteDetailView({
 }) {
   const fichas = athlete.assessments.filter((a) => a.id);
   const latest = fichas[0];
+  const [zoom, setZoom] = useState(false);
+  const w = latest?.profile?.weight;
+  const h = latest?.profile?.height;
+  const imc = w != null && h != null && h > 0 ? w / (h / 100) ** 2 : null;
 
   return (
     <div className="grid gap-5">
@@ -786,7 +804,19 @@ function AthleteDetailView({
       <section className="surface-1 rounded-lg p-5">
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div className="flex items-start gap-4">
-            <Avatar name={athlete.name} photoUrl={athlete.photoUrl} size="lg" />
+            <button
+              type="button"
+              onClick={() => athlete.photoUrl && setZoom(true)}
+              className="group relative shrink-0"
+              title="Ampliar foto"
+            >
+              <Avatar name={athlete.name} photoUrl={athlete.photoUrl} size="lg" />
+              {athlete.photoUrl ? (
+                <span className="absolute inset-0 grid place-items-center rounded-md bg-black/0 opacity-0 transition group-hover:bg-black/40 group-hover:opacity-100">
+                  <Search className="size-5 text-white" />
+                </span>
+              ) : null}
+            </button>
             <div className="min-w-0">
               <p className="truncate text-2xl font-semibold">{athlete.name}</p>
               <p className="mt-1 text-sm text-muted-foreground">{athlete.category} · {athlete.group} · {athlete.sport} · {athlete.position}</p>
@@ -810,6 +840,27 @@ function AthleteDetailView({
           ) : null}
         </div>
       </section>
+
+      {latest ? (
+        <section className="surface-1 rounded-lg p-5">
+          <SectionHeader eyebrow={`Última ficha · ${formatDate(latest.date)}`} title="Indicadores clave" />
+          <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <SummaryTile label="Peso" value={w == null ? '—' : `${w} kg`} icon={Gauge} />
+            <SummaryTile label="Estatura" value={h == null ? '—' : `${h} cm`} icon={Gauge} />
+            <SummaryTile label="IMC" value={imc == null ? '—' : imc.toFixed(1)} icon={Gauge} />
+            <SummaryTile
+              label="Edad"
+              value={latest.profile?.chronologicalAge == null ? '—' : `${latest.profile.chronologicalAge} años`}
+              icon={CalendarDays}
+            />
+          </div>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {latest.metrics.map((metric) => (
+              <MetricInputCard key={metric.label} metric={metric} />
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <section className="surface-1 rounded-lg p-5">
         <div className="mb-4 flex items-center gap-2">
@@ -854,6 +905,24 @@ function AthleteDetailView({
           </div>
         )}
       </section>
+
+      {zoom && athlete.photoUrl ? (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-black/85 p-4"
+          onClick={() => setZoom(false)}
+          role="dialog"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={athlete.photoUrl} alt={athlete.name} className="max-h-[90dvh] max-w-[92vw] rounded-lg object-contain" />
+          <button
+            type="button"
+            onClick={() => setZoom(false)}
+            className="absolute right-4 top-4 grid size-11 place-items-center rounded-md bg-white/10 text-white"
+          >
+            <X className="size-5" />
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -899,8 +968,10 @@ function AssessmentView({
       pruebaAplicada: s(f.pruebaAplicada), sitReach: s(f.resultadoCm), flexObs: s(f.observacion),
       sj: s(p.sjCm), cmj: s(p.cmjCm), abalakov: s(p.abalakovCm),
       saltoUniDer: s(p.saltoUnilateralDerCm), saltoUniIzq: s(p.saltoUnilateralIzqCm),
-      fuerzaMax: s(p.fuerzaMaximaKg), squat1rm: s(p.sentadilla1rmKg),
-      banca1rm: s(p.pressBanca1rmKg), pct1rm: s(p.pct1rmSentadilla),
+      fuerzaMax: s(p.fuerzaMaximaKg),
+      squat1rm: s(p.sentadilla1rmKg), squatSeg: s(p.sentadillaSeg),
+      banca1rm: s(p.pressBanca1rmKg), bancaSeg: s(p.pressBancaSeg),
+      pct1rm: s(p.pct1rmSentadilla),
       speed10m: s(p.velocidad10mS), speed30m: s(p.velocidad30mS),
       agilidad505: s(p.agilidad505S), vo2: s(p.vo2Ml),
       notes: assessment.profile?.notes || '', plan: assessment.raw?.plan ?? '',
@@ -929,6 +1000,15 @@ function AssessmentView({
   const cmjValue = toNumber(draft.cmj);
   const weightValue = toNumber(draft.weight);
   const heightValue = toNumber(draft.height);
+  const bmiValue =
+    weightValue != null && heightValue != null && heightValue > 0
+      ? weightValue / (heightValue / 100) ** 2
+      : null;
+  const expl = (kgKey: keyof AssessmentDraft, segKey: keyof AssessmentDraft) => {
+    const kg = toNumber(draft[kgKey]);
+    const sg = toNumber(draft[segKey]);
+    return kg != null && sg != null && sg > 0 ? (kg / sg).toFixed(1) : null;
+  };
   const speed10mValue = toNumber(draft.speed10m);
   const squatValue = toNumber(draft.squat1rm);
   const vo2Value = toNumber(draft.vo2);
@@ -969,7 +1049,7 @@ function AssessmentView({
   };
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[minmax(0,1.02fr)_minmax(380px,0.98fr)]">
+    <div className="grid gap-5 lg:grid-cols-[minmax(0,7fr)_minmax(300px,3fr)]">
       <section className="surface-1 rounded-lg p-4 md:p-5">
         <div className="mb-4 flex items-center justify-between print:hidden">
           <Button variant="outline" size="sm" onClick={onBack}>
@@ -1092,9 +1172,6 @@ function AssessmentView({
           <FormField label="Velocidad 10 m (s)">
             <input disabled={!isAdmin} inputMode="decimal" value={draft.speed10m} onChange={(event) => updateDraft('speed10m', event.target.value)} placeholder="1.90" className="field-control" />
           </FormField>
-          <FormField label="Sentadilla 1RM (kg)">
-            <input disabled={!isAdmin} inputMode="decimal" value={draft.squat1rm} onChange={(event) => updateDraft('squat1rm', event.target.value)} placeholder="95" className="field-control" />
-          </FormField>
           <FormField label="Resistencia VO2max (ml/kg)">
             <input disabled={!isAdmin} inputMode="decimal" value={draft.vo2} onChange={(event) => updateDraft('vo2', event.target.value)} placeholder="52" className="field-control" />
           </FormField>
@@ -1103,6 +1180,9 @@ function AssessmentView({
         <h3 className="mt-8 mb-3 text-sm font-bold uppercase tracking-wide text-brand">Antropometría</h3>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {F('% Masa corporal (magra)', 'masa', 'Ej. 34')}
+          <FormField label="IMC (calculado)">
+            <input readOnly value={bmiValue == null ? '—' : bmiValue.toFixed(1)} className="field-control" />
+          </FormField>
         </div>
 
         <h3 className="mt-8 mb-3 text-sm font-bold uppercase tracking-wide text-brand">Control cardiovascular</h3>
@@ -1144,11 +1224,35 @@ function AssessmentView({
           {F('Salto unilateral IZQ (cm)', 'saltoUniIzq')}
         </div>
 
-        <h3 className="mt-8 mb-3 text-sm font-bold uppercase tracking-wide text-brand">Rendimiento · fuerza</h3>
+        <h3 className="mt-8 mb-3 text-sm font-bold uppercase tracking-wide text-brand">Rendimiento · fuerza y explosividad</h3>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {F('Fuerza máxima (kg)', 'fuerzaMax')}
-          {F('Press de banca 1RM (kg)', 'banca1rm')}
           {F('% 1RM sentadilla', 'pct1rm')}
+        </div>
+        <p className="mt-3 text-xs text-muted-foreground">
+          Explosividad = carga levantada ÷ tiempo (con encoder). Ej. 20 kg en 3.2 s → 6.3 kg/s.
+        </p>
+        <div className="mt-3 grid gap-4 md:grid-cols-2">
+          <div className="rounded-md border border-border bg-background/35 p-4">
+            <p className="mb-3 text-sm font-semibold text-foreground">Sentadilla</p>
+            <div className="grid grid-cols-2 gap-3">
+              {F('Carga (kg)', 'squat1rm', 'Ej. 20')}
+              {F('Tiempo (s)', 'squatSeg', 'Ej. 3.2')}
+            </div>
+            <p className="mt-2 text-sm font-semibold text-brand">
+              Explosividad: {expl('squat1rm', 'squatSeg') ?? '—'} {expl('squat1rm', 'squatSeg') ? 'kg/s' : ''}
+            </p>
+          </div>
+          <div className="rounded-md border border-border bg-background/35 p-4">
+            <p className="mb-3 text-sm font-semibold text-foreground">Press de banca</p>
+            <div className="grid grid-cols-2 gap-3">
+              {F('Carga (kg)', 'banca1rm', 'Ej. 30')}
+              {F('Tiempo (s)', 'bancaSeg', 'Ej. 2.8')}
+            </div>
+            <p className="mt-2 text-sm font-semibold text-brand">
+              Explosividad: {expl('banca1rm', 'bancaSeg') ?? '—'} {expl('banca1rm', 'bancaSeg') ? 'kg/s' : ''}
+            </p>
+          </div>
         </div>
 
         <h3 className="mt-8 mb-3 text-sm font-bold uppercase tracking-wide text-brand">Rendimiento · velocidad y agilidad</h3>
@@ -1371,7 +1475,69 @@ function ReportDataCard({ title, rows }: { title: string; rows: Array<{ label: s
 }
 
 function RadarChart({ data, compact = false }: { data: RadarMetric[]; compact?: boolean }) {
+  const [zoomOpen, setZoomOpen] = useState(false);
+
+  useEffect(() => {
+    if (!zoomOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setZoomOpen(false);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [zoomOpen]);
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setZoomOpen(true)}
+        className="group mx-auto block w-full max-w-[420px] rounded-lg outline-none transition hover:bg-white/5 focus-visible:ring-2 focus-visible:ring-brand"
+        aria-label="Ampliar radar de rendimiento"
+      >
+        <RadarChartSvg data={data} compact={compact} />
+        <span className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground transition group-hover:text-brand">
+          <Search className="size-3.5" />
+          Click para ampliar
+        </span>
+      </button>
+
+      {zoomOpen ? (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-black/75 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Radar de rendimiento ampliado"
+          onClick={() => setZoomOpen(false)}
+        >
+          <section
+            className="surface-2 w-full max-w-4xl rounded-lg p-4 shadow-float md:p-6"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand">Perfil</p>
+                <h2 className="text-xl font-semibold">Radar de rendimiento</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setZoomOpen(false)}
+                className="grid size-10 place-items-center rounded-md border border-border bg-background/40 text-muted-foreground transition hover:text-foreground"
+                aria-label="Cerrar radar ampliado"
+              >
+                <X className="size-5" />
+              </button>
+            </div>
+            <RadarChartSvg data={data} large />
+          </section>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function RadarChartSvg({ data, compact = false, large = false }: { data: RadarMetric[]; compact?: boolean; large?: boolean }) {
   const size = compact ? 260 : 360;
+  const padX = compact ? 30 : 46; // margen para etiquetas laterales
   const center = size / 2;
   const radius = compact ? 86 : 124;
   const angles = [-90, 0, 90, 180].map((angle) => (angle * Math.PI) / 180);
@@ -1382,8 +1548,8 @@ function RadarChart({ data, compact = false }: { data: RadarMetric[]; compact?: 
   const polygon = (key: 'score' | 'team') => data.map((metric, index) => point(index, metric[key]).join(',')).join(' ');
 
   return (
-    <div className="mx-auto w-full max-w-[420px]">
-      <svg viewBox={`0 0 ${size} ${size}`} role="img" aria-label="Radar de rendimiento del atleta" className="h-auto w-full">
+    <div className={`mx-auto w-full ${large ? 'max-w-[720px]' : 'max-w-[420px]'}`}>
+      <svg viewBox={`${-padX} 0 ${size + padX * 2} ${size}`} role="img" aria-label="Radar de rendimiento del atleta" className="h-auto w-full">
         {[25, 50, 75, 100].map((level) => (
           <polygon
             key={level}
@@ -1412,7 +1578,7 @@ function RadarChart({ data, compact = false }: { data: RadarMetric[]; compact?: 
           return (
             <g key={metric.key}>
               <text x={labelX} y={labelY} textAnchor={anchor} fill="hsl(var(--foreground))" fontSize={compact ? 10 : 12} fontWeight="700">
-                {compact ? metric.shortLabel : metric.label}
+                {metric.shortLabel}
               </text>
               {!compact ? (
                 <text x={labelX} y={labelY + 16} textAnchor={anchor} fill="hsl(var(--muted-foreground))" fontSize="11">
@@ -1997,13 +2163,60 @@ function CreateAthleteModal({
   );
 }
 
-function SettingsView({ settings, onReload }: { settings: ProductSettings; onReload: () => Promise<void> }) {
+function SettingsView({
+  settings,
+  onReload,
+  fichaTheme,
+  onFichaTheme,
+  sampleFichaId,
+}: {
+  settings: ProductSettings;
+  onReload: () => Promise<void>;
+  fichaTheme: FichaTheme;
+  onFichaTheme: (theme: FichaTheme) => Promise<void>;
+  sampleFichaId?: string;
+}) {
   return (
-    <div className="grid gap-5 xl:grid-cols-2">
-      <SettingsList title="Categorías" description="Tipos de atención del deportista." kind="category" values={settings.categories} onReload={onReload} />
-      <SettingsList title="Grupos" description="Equipos o cohortes (ej. Running, Cofisam)." kind="group" values={settings.groups} onReload={onReload} />
-      <SettingsList title="Deportes" description="Opciones del perfil del deportista." kind="sport" values={settings.sports} onReload={onReload} />
-      <SettingsList title="Perfiles / posiciones" description="Rol deportivo o enfoque de entrenamiento." kind="position" values={settings.positions} onReload={onReload} />
+    <div className="grid gap-5">
+      <section className="surface-1 rounded-lg p-4 md:p-5">
+        <SectionHeader eyebrow="Apariencia" title="Tema de la ficha" />
+        <p className="-mt-2 mb-4 text-sm text-muted-foreground">
+          Elige cómo se ve la ficha pública del deportista (y su PDF): clara u oscura.
+        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="inline-flex rounded-md border border-border bg-background p-1">
+            {(['light', 'dark'] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => onFichaTheme(t)}
+                className={`h-10 rounded-sm px-4 text-sm font-semibold transition ${
+                  fichaTheme === t ? 'bg-brand text-brand-foreground' : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {t === 'light' ? 'Clara' : 'Oscura'}
+              </button>
+            ))}
+          </div>
+          {sampleFichaId ? (
+            <>
+              <a href={`/ficha/${sampleFichaId}?theme=${fichaTheme}`} target="_blank" rel="noreferrer" className="text-sm font-semibold text-brand hover:underline">
+                Previsualizar ficha ↗
+              </a>
+              <span className="text-xs text-muted-foreground">Se aplica a lo que ve el deportista.</span>
+            </>
+          ) : (
+            <span className="text-xs text-muted-foreground">Crea una ficha para previsualizar.</span>
+          )}
+        </div>
+      </section>
+
+      <div className="grid gap-5 xl:grid-cols-2">
+        <SettingsList title="Categorías" description="Tipos de atención del deportista." kind="category" values={settings.categories} onReload={onReload} />
+        <SettingsList title="Grupos" description="Equipos o cohortes (ej. Running, Cofisam)." kind="group" values={settings.groups} onReload={onReload} />
+        <SettingsList title="Deportes" description="Opciones del perfil del deportista." kind="sport" values={settings.sports} onReload={onReload} />
+        <SettingsList title="Perfiles / posiciones" description="Rol deportivo o enfoque de entrenamiento." kind="position" values={settings.positions} onReload={onReload} />
+      </div>
     </div>
   );
 }

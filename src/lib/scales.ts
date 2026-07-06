@@ -45,6 +45,25 @@ export const biologicalAge = (
 
 const noData = { level: 'warning' as Level, label: 'Sin dato', range: 'Pendiente' };
 
+/** Índice de Masa Corporal = peso(kg) / estatura(m)². */
+export const bmi = (weightKg: number | null | undefined, heightCm: number | null | undefined) => {
+  if (weightKg == null || heightCm == null || heightCm <= 0) return null;
+  const m = heightCm / 100;
+  return weightKg / (m * m);
+};
+
+export const classifyBmi = (value: number | null | undefined) => {
+  if (value == null) return noData;
+  if (value < 18.5) return { level: 'warning' as Level, label: 'Bajo peso', range: '< 18.5' };
+  if (value < 25) return { level: 'good' as Level, label: 'Normal', range: '18.5 – 24.9' };
+  if (value < 30) return { level: 'warning' as Level, label: 'Sobrepeso', range: '25 – 29.9' };
+  return { level: 'danger' as Level, label: 'Obesidad', range: '≥ 30' };
+};
+
+/** Explosividad = carga(kg) / tiempo(s). Índice simple de potencia con encoder. */
+export const explosiveness = (kg: number | null | undefined, seconds: number | null | undefined) =>
+  kg == null || seconds == null || seconds <= 0 ? null : kg / seconds;
+
 export const classifyFat = (sex: Athlete['sex'], value: number | null | undefined) => {
   if (value == null) return noData;
   if (sex === 'M') {

@@ -1,5 +1,6 @@
 import type { Level } from '@/styles/tokens';
 import type { Anthropometry, Cardio, Flexibility, Performance } from '@/lib/ficha';
+import { bmi, normalize, normalizeSpeed } from '@/lib/scales';
 
 /**
  * Escalas de comparación (semáforo) por indicador — FICHA_CAMPOS.md.
@@ -116,6 +117,25 @@ function sitReachComparison(sex: Sex, v: number | null | undefined): IndicatorCo
   };
 }
 
+function bmiComparison(weightKg: number | null | undefined, heightCm: number | null | undefined): IndicatorComparison {
+  const v = bmi(weightKg, heightCm);
+  const defs: Omit<Band, 'active'>[] = [
+    { label: 'Bajo peso', range: '< 18.5', level: 'warning' },
+    { label: 'Normal', range: '18.5 – 24.9', level: 'good' },
+    { label: 'Sobrepeso', range: '25 – 29.9', level: 'warning' },
+    { label: 'Obesidad', range: '≥ 30', level: 'danger' },
+  ];
+  let idx = -1;
+  if (v != null) idx = v < 18.5 ? 0 : v < 25 ? 1 : v < 30 ? 2 : 3;
+  return {
+    key: 'bmi',
+    title: 'IMC (Índice de Masa Corporal)',
+    valueLabel: v == null ? '—' : v.toFixed(1),
+    status: idx < 0 ? null : { level: defs[idx].level, label: defs[idx].label },
+    bands: mk(defs, idx),
+  };
+}
+
 function cmjComparison(v: number | null | undefined): IndicatorComparison {
   const defs: Omit<Band, 'active'>[] = [
     { label: 'Bajo', range: '< 32 cm', level: 'danger' },
@@ -141,8 +161,26 @@ export type ComparisonMeasures = {
   performance?: Performance | null;
 };
 
+export type RadarAxis = { label: string; score: number; raw: string };
+
+/** Ejes del radar de perfil de rendimiento (0–100). */
+export function buildRadar(m: ComparisonMeasures): RadarAxis[] {
+  const p = m.performance ?? {};
+  const squat = p.sentadilla1rmKg ?? p.fuerzaMaximaKg;
+  const speed = p.velocidad10mS;
+  const vo2 = p.vo2Ml;
+  const cmj = p.cmjCm;
+  return [
+    { label: 'Fuerza', score: normalize(squat, 40, 140), raw: squat == null ? '—' : `${squat} kg` },
+    { label: 'Velocidad', score: normalizeSpeed(speed), raw: speed == null ? '—' : `${speed} s` },
+    { label: 'Resistencia', score: normalize(vo2, 30, 65), raw: vo2 == null ? '—' : `${vo2} ml/kg` },
+    { label: 'Salto', score: normalize(cmj, 15, 55), raw: cmj == null ? '—' : `${cmj} cm` },
+  ];
+}
+
 export function buildComparison(sex: Sex, m: ComparisonMeasures): IndicatorComparison[] {
   return [
+    bmiComparison(m.anthropometry?.pesoKg, m.anthropometry?.estaturaCm),
     fatComparison(sex, m.anthropometry?.pctGrasa),
     masaComparison(sex, m.anthropometry?.pctMasa),
     hrComparison(m.cardio?.fcReposo),

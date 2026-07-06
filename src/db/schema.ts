@@ -55,6 +55,12 @@ export const assessments = pgTable('assessments', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+// Configuración global de la app (clave/valor). Ej. tema de la ficha.
+export const appSettings = pgTable('app_settings', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+});
+
 export type Athlete = typeof athletes.$inferSelect;
 export type NewAthlete = typeof athletes.$inferInsert;
 export type Assessment = typeof assessments.$inferSelect;

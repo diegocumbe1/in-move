@@ -266,6 +266,39 @@
 }
 
 /* ==========================================================================
+   FICHA — variables de tema (claro por defecto / oscuro opcional).
+   La ficha usa var(--fc-*) para poder alternar claro/oscuro desde Settings.
+   ========================================================================== */
+.ficha-scope {
+  --fc-page: #f3f4f6;
+  --fc-card: #ffffff;
+  --fc-card-2: #f0fdf4;
+  --fc-ink: #111827;
+  --fc-muted: #6b7280;
+  --fc-line: #86efac;
+  --fc-line-soft: #bbf7d0;
+  --fc-label-bg: #dcfce7;
+  --fc-label-ink: #166534;
+  --fc-accent: #15803d;
+  --fc-grid: #d1d5db;
+  --fc-band-active: #e5e7eb;
+}
+.ficha-scope[data-theme='dark'] {
+  --fc-page: #0a0f0d;
+  --fc-card: #121a16;
+  --fc-card-2: #0f1613;
+  --fc-ink: #e8eaed;
+  --fc-muted: #9aa3a0;
+  --fc-line: #1c5236;
+  --fc-line-soft: #163f2a;
+  --fc-label-bg: #14301f;
+  --fc-label-ink: #86efac;
+  --fc-accent: #4ade80;
+  --fc-grid: #374151;
+  --fc-band-active: #22312a;
+}
+
+/* ==========================================================================
    IMPRESIÓN / PDF de la ficha (window.print → "Guardar como PDF")
    La app es tema oscuro; para el PDF forzamos paleta clara y A4, y ocultamos
    todo el cromo (nav/header/botones) dejando solo la ficha.
