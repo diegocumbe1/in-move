@@ -1,0 +1,25 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# next.js
+/.next/
+/out/
+/build
+next-env.d.ts
+*.tsbuildinfo
+
+# env — NUNCA subir secretos (solo .env.example va al repo)
+.env
+.env.local
+.env.*.local
+
+# drizzle
+/drizzle
+
+# misc
+.DS_Store
+*.pem
+/preview/node_modules
+/preview/.next

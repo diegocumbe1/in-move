@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="In Move">
+  <!-- Icono fuente de In Move. Exportar a PNG (192/512, normal y maskable).
+       El contenido vive dentro del 80% central (safe zone maskable). -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0E1A1F"/>
+      <stop offset="1" stop-color="#0A1014"/>
+    </linearGradient>
+    <linearGradient id="mark" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2FE6A0"/>
+      <stop offset="1" stop-color="#12A06E"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <!-- Marca "en movimiento": chevrons de velocidad -->
+  <g fill="none" stroke="url(#mark)" stroke-width="34" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M150 176 L236 256 L150 336"/>
+    <path d="M262 176 L348 256 L262 336" opacity="0.55"/>
+  </g>
+</svg>
