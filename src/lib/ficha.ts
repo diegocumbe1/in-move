@@ -65,6 +65,7 @@ export const performanceSchema = z.object({
   velocidad10mS: z.number().optional(),
   velocidad30mS: z.number().optional(),
   agilidad505S: z.number().optional(),
+  vo2Ml: z.number().optional(),
 });
 
 export type Anthropometry = z.infer<typeof anthropometrySchema>;

@@ -1,4 +1,5 @@
 import type { Level } from '@/styles/tokens';
+import type { Anthropometry, Cardio, Rom, Flexibility, Performance } from '@/lib/ficha';
 
 export type ViewId = 'athletes' | 'assessment' | 'dashboard' | 'settings';
 
@@ -24,6 +25,7 @@ export type ScaleMetric = {
 };
 
 export type Assessment = {
+  id?: string;
   date: string;
   score: number;
   radar: RadarMetric[];
@@ -37,6 +39,15 @@ export type Assessment = {
     squat1rm?: number | null;
     vo2?: number | null;
     notes?: string;
+  };
+  // Medidas crudas por dominio (para repoblar el formulario completo al editar).
+  raw?: {
+    anthropometry?: Anthropometry | null;
+    cardio?: Cardio | null;
+    rom?: Rom | null;
+    flexibility?: Flexibility | null;
+    performance?: Performance | null;
+    plan?: string | null;
   };
 };
 

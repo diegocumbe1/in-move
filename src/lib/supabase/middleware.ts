@@ -28,9 +28,12 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const isLogin = request.nextUrl.pathname.startsWith('/login');
+  const { pathname } = request.nextUrl;
+  const isLogin = pathname.startsWith('/login');
+  // /ficha/[id] es la ficha pública del deportista: accesible sin sesión.
+  const isPublic = isLogin || pathname.startsWith('/ficha');
 
-  if (!user && !isLogin) {
+  if (!user && !isPublic) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
     return NextResponse.redirect(url);

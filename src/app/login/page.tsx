@@ -31,8 +31,10 @@ export default function LoginPage() {
   return (
     <div className="grid min-h-dvh place-items-center bg-[radial-gradient(circle_at_18%_0%,hsl(var(--brand)/0.10),transparent_28%),hsl(var(--background))] px-4 text-foreground">
       <div className="w-full max-w-sm">
-        <div className="mb-8 text-center">
-          <p className="text-3xl font-bold uppercase tracking-[-0.04em] leading-none">
+        <div className="mb-8 flex flex-col items-center text-center">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.jpg" alt="In Move" className="size-24 rounded-full object-cover ring-1 ring-border" />
+          <p className="mt-4 text-3xl font-bold uppercase tracking-[-0.04em] leading-none">
             <span className="text-brand">IN</span>MOVE
           </p>
           <p className="mt-2 text-sm text-muted-foreground">Centro de evaluacion y rendimiento</p>

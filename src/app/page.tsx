@@ -1,14 +1,20 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Activity,
   BarChart3,
   CalendarDays,
   Camera,
   Check,
+  ChevronLeft,
   ChevronRight,
   ClipboardList,
+  Download,
+  History,
+  Pencil,
+  FilePlus,
   Flame,
   ImagePlus,
   Gauge,
@@ -45,11 +51,15 @@ import {
 import type { Level } from '@/styles/tokens';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/premium';
+import * as api from '@/lib/actions';
+import { uploadAthletePhoto } from '@/lib/upload';
+import { createClient as createSupabaseClient } from '@/lib/supabase/client';
+import type { AssessmentDraftInput } from '@/lib/form-types';
+import type { CatalogKind } from '@/lib/ficha';
 
 const viewItems: Array<{ id: ViewId; label: string; icon: typeof UsersRound }> = [
   { id: 'athletes', label: 'Deportistas', icon: UsersRound },
   { id: 'assessment', label: 'Valoracion', icon: ClipboardList },
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
 
@@ -82,18 +92,7 @@ const demoBodyProfile: Record<string, { weight: number; height: number; notes: s
 };
 const defaultAthletePhoto = '/images/default-athlete.svg';
 
-type AssessmentDraft = {
-  fat: string;
-  restingHr: string;
-  sitReach: string;
-  cmj: string;
-  weight: string;
-  height: string;
-  speed10m: string;
-  squat1rm: string;
-  vo2: string;
-  notes: string;
-};
+type AssessmentDraft = AssessmentDraftInput;
 
 const toNumber = (value: string) => {
   const parsed = Number(value.replace(',', '.'));
@@ -169,19 +168,48 @@ const classifyCmj = (value: number | null) => {
 };
 
 export default function MockMvpApp() {
+  const router = useRouter();
   const [view, setView] = useState<ViewId>('athletes');
-  const [mockAthletes, setMockAthletes] = useState<Athlete[]>(initialAthletes);
+  const [mockAthletes, setMockAthletes] = useState<Athlete[]>([]);
   const [settings, setSettings] = useState<ProductSettings>(defaultSettings);
-  const [selectedId, setSelectedId] = useState(initialAthletes[0].id);
+  const [selectedId, setSelectedId] = useState<string>('');
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('Todos');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [publicPreview, setPublicPreview] = useState(true);
+  const [isAdmin] = useState(true); // sesión ya validada por el middleware
+  const [publicPreview, setPublicPreview] = useState(false);
   const [publicAssessment, setPublicAssessment] = useState<Assessment | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [formAssessment, setFormAssessment] = useState<Assessment | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    api
+      .getInitialData()
+      .then((data) => {
+        if (!active) return;
+        setMockAthletes(data.athletes);
+        setSettings(data.settings);
+        setSelectedId((current) => current || data.athletes[0]?.id || '');
+        setLoading(false);
+      })
+      .catch(() => active && setLoading(false));
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function handleLogout() {
+    const supabase = createSupabaseClient();
+    await supabase.auth.signOut();
+    router.push('/login');
+    router.refresh();
+  }
 
   const selected = mockAthletes.find((athlete) => athlete.id === selectedId) ?? mockAthletes[0];
-  const currentAssessment = selected.assessments[0];
+  const currentAssessment = selected?.assessments[0];
   const isPublicView = !isAdmin || publicPreview;
 
   const filteredAthletes = useMemo(() => {
@@ -200,29 +228,92 @@ export default function MockMvpApp() {
 
   const categoryOptions = ['Todos', ...settings.categories];
 
-  function createAthlete(data: NewAthleteFormData) {
-    const athlete: Athlete = {
-      id: `${Date.now()}`,
-      name: data.name.trim(),
-      document: data.document.trim(),
-      birthDate: data.birthDate,
-      sex: data.sex,
-      code: generateCode(),
-      category: data.category,
-      group: data.group,
-      sport: data.sport,
-      position: data.position,
-      photoUrl: data.photoUrl,
-      status: 'warning',
-      statusLabel: 'Nuevo',
-      assessments: [emptyAssessment()],
-    };
-    setMockAthletes((current) => [athlete, ...current]);
+  async function createAthlete(data: NewAthleteFormData) {
+    try {
+      let photoPath: string | null = null;
+      if (data.photoFile) {
+        photoPath = await uploadAthletePhoto(data.photoFile);
+      }
+      const athlete = await api.createAthlete({
+        name: data.name,
+        document: data.document,
+        birthDate: data.birthDate,
+        sex: data.sex,
+        category: data.category,
+        group: data.group,
+        sport: data.sport,
+        position: data.position,
+        photoPath,
+      });
+      setMockAthletes((current) => [athlete, ...current]);
+      setSelectedId(athlete.id);
+      setPublicAssessment(null);
+      setIsCreateOpen(false);
+      setView('assessment');
+      setPublicPreview(false);
+    } catch (error) {
+      console.error(error);
+      alert('No se pudo guardar el deportista. Revisa la conexión e intenta de nuevo.');
+    }
+  }
+
+  async function reload() {
+    const data = await api.getInitialData();
+    setMockAthletes(data.athletes);
+    setSettings(data.settings);
+  }
+
+  async function saveAssessmentDraft(athleteId: string, draft: AssessmentDraftInput, assessmentId?: string) {
+    await api.saveAssessment(athleteId, draft, assessmentId);
+    await reload();
+  }
+
+  async function updateAthleteInfo(athleteId: string, data: NewAthleteFormData) {
+    try {
+      let photoPath: string | null = null;
+      if (data.photoFile) photoPath = await uploadAthletePhoto(data.photoFile);
+      await api.updateAthlete(athleteId, {
+        name: data.name,
+        document: data.document,
+        birthDate: data.birthDate,
+        sex: data.sex,
+        category: data.category,
+        group: data.group,
+        sport: data.sport,
+        position: data.position,
+        photoPath,
+      });
+      await reload();
+      setEditOpen(false);
+    } catch (error) {
+      console.error(error);
+      alert('No se pudo actualizar la información del deportista.');
+    }
+  }
+
+  const detailAthlete = detailId ? mockAthletes.find((a) => a.id === detailId) ?? null : null;
+
+  function openDetail(athlete: Athlete) {
     setSelectedId(athlete.id);
-    setPublicAssessment(null);
-    setIsCreateOpen(false);
-    setView('assessment');
+    setDetailId(athlete.id);
     setPublicPreview(false);
+    setFormAssessment(null);
+    setView('athletes');
+  }
+  function viewFicha(_athlete: Athlete, assessment: Assessment) {
+    if (assessment.id) router.push(`/ficha/${assessment.id}`);
+  }
+  function startNewFicha(athlete: Athlete) {
+    setSelectedId(athlete.id);
+    setFormAssessment(null);
+    setPublicPreview(false);
+    setView('assessment');
+  }
+  function editFicha(athlete: Athlete, assessment: Assessment) {
+    setSelectedId(athlete.id);
+    setFormAssessment(assessment);
+    setPublicPreview(false);
+    setView('assessment');
   }
 
   function updateAthletePhoto(athleteId: string, photoUrl: string) {
@@ -231,18 +322,54 @@ export default function MockMvpApp() {
     );
   }
 
+  if (loading) {
+    return (
+      <div className="grid min-h-dvh place-items-center bg-background text-sm font-semibold text-muted-foreground">
+        Cargando…
+      </div>
+    );
+  }
+
+  if (!selected) {
+    return (
+      <div className="grid min-h-dvh place-items-center bg-background px-4 text-center text-foreground">
+        <div className="flex flex-col items-center">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.jpg" alt="In Move" className="size-20 rounded-full object-cover ring-1 ring-border" />
+          <p className="mt-4 text-2xl font-bold uppercase tracking-[-0.04em]">
+            <span className="text-brand">IN</span>MOVE
+          </p>
+          <p className="mt-3 text-muted-foreground">Aún no hay deportistas registrados.</p>
+          <div className="mt-6 flex justify-center gap-3">
+            <Button onClick={() => setIsCreateOpen(true)}>
+              <UserRound />
+              Nuevo deportista
+            </Button>
+            <Button variant="outline" onClick={handleLogout}>
+              <LogOut />
+              Cerrar sesion
+            </Button>
+          </div>
+        </div>
+        {isCreateOpen ? (
+          <CreateAthleteModal settings={settings} onClose={() => setIsCreateOpen(false)} onCreate={createAthlete} />
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-dvh bg-[radial-gradient(circle_at_18%_0%,hsl(var(--brand)/0.10),transparent_28%),radial-gradient(circle_at_90%_12%,hsl(var(--level-elite)/0.08),transparent_26%),hsl(var(--background))] text-foreground">
       <div className="mx-auto flex min-h-dvh w-full max-w-[1440px] flex-col xl:flex-row">
         {isAdmin ? (
-        <aside className="hidden w-[236px] shrink-0 border-r border-border bg-surface/80 px-4 py-5 xl:flex xl:flex-col">
+        <aside className="hidden w-[236px] shrink-0 border-r border-border bg-surface/80 px-4 py-5 xl:flex xl:flex-col print:hidden">
           <BrandBlock />
           <NavRail current={view} onChange={(nextView) => {
             setPublicPreview(false);
             setView(nextView);
           }} />
           <div className="mt-auto rounded-lg border border-border bg-background/40 p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand">MVP mock</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand">MVP</p>
             <p className="mt-2 text-sm leading-5 text-muted-foreground">
               Vistas navegables con datos locales para aprobacion de producto.
             </p>
@@ -251,7 +378,7 @@ export default function MockMvpApp() {
         ) : null}
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="sticky top-0 z-30 border-b border-border bg-background/92 px-4 py-3 backdrop-blur md:px-6 lg:px-8">
+          <header className="sticky top-0 z-30 border-b border-border bg-background/92 px-4 py-3 backdrop-blur md:px-6 lg:px-8 print:hidden">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand">
@@ -290,22 +417,9 @@ export default function MockMvpApp() {
                     Editar
                   </Button>
                 ) : null}
-                <Button
-                  size="sm"
-                  variant={isAdmin ? 'outline' : 'brand'}
-                  onClick={() => {
-                    if (isAdmin) {
-                      setIsAdmin(false);
-                      setPublicPreview(true);
-                    } else {
-                      setIsAdmin(true);
-                      setPublicPreview(false);
-                      setView('assessment');
-                    }
-                  }}
-                >
-                  {isAdmin ? <LogOut /> : <LogIn />}
-                  {isAdmin ? 'Cerrar sesion' : 'Ingresar como admin'}
+                <Button size="sm" variant="outline" onClick={handleLogout}>
+                  <LogOut />
+                  Cerrar sesion
                 </Button>
               </div>
             </div>
@@ -340,27 +454,51 @@ export default function MockMvpApp() {
 
           <main className="flex-1 px-4 py-4 pb-[calc(var(--safe-bottom)+5.5rem)] md:px-6 md:py-6 lg:px-8 xl:pb-8">
             {isPublicView ? (
-              <PublicAssessmentView athlete={selected} assessmentOverride={publicAssessment} />
+              <div className="mx-auto grid max-w-6xl gap-4">
+                <div className="flex items-center justify-between gap-3 print:hidden">
+                  <Button variant="outline" size="sm" onClick={() => setPublicPreview(false)}>
+                    <ChevronLeft />
+                    Volver
+                  </Button>
+                  <span className="text-xs font-semibold text-muted-foreground">Vista previa (sin guardar)</span>
+                </div>
+                <PublicAssessmentView athlete={selected} assessmentOverride={publicAssessment} />
+              </div>
             ) : view === 'athletes' ? (
-              <AthletesView
-                athletes={filteredAthletes}
-                selected={selected}
-                categoryOptions={categoryOptions}
-                query={query}
-                category={category}
-                onQuery={setQuery}
-                onCategory={setCategory}
-                onCreate={() => setIsCreateOpen(true)}
-                onSelect={(athlete) => {
-                  setSelectedId(athlete.id);
-                  setPublicAssessment(null);
-                  setView('assessment');
-                }}
-              />
+              detailAthlete ? (
+                <AthleteDetailView
+                  athlete={detailAthlete}
+                  isAdmin={isAdmin}
+                  onBack={() => setDetailId(null)}
+                  onViewFicha={(assessment) => viewFicha(detailAthlete, assessment)}
+                  onEditInfo={() => setEditOpen(true)}
+                  onNewFicha={() => startNewFicha(detailAthlete)}
+                  onEditFicha={(assessment) => editFicha(detailAthlete, assessment)}
+                />
+              ) : (
+                <AthletesTable
+                  athletes={filteredAthletes}
+                  categoryOptions={categoryOptions}
+                  query={query}
+                  category={category}
+                  onQuery={setQuery}
+                  onCategory={setCategory}
+                  onCreate={() => setIsCreateOpen(true)}
+                  onOpen={openDetail}
+                />
+              )
             ) : view === 'assessment' ? (
               <AssessmentView
+                key={(formAssessment?.id ?? 'new') + selected.id}
                 athlete={selected}
+                assessment={formAssessment ?? emptyAssessment()}
+                assessmentId={formAssessment?.id}
                 isAdmin={isAdmin}
+                onBack={() => setView('athletes')}
+                onSave={async (draft) => {
+                  await saveAssessmentDraft(selected.id, draft, formAssessment?.id);
+                  setView('athletes');
+                }}
                 onPhotoChange={(photoUrl) => updateAthletePhoto(selected.id, photoUrl)}
                 onPreviewPublic={(nextAssessment) => {
                   setPublicAssessment(nextAssessment);
@@ -370,12 +508,12 @@ export default function MockMvpApp() {
             ) : view === 'dashboard' ? (
               <DashboardView athletes={mockAthletes} />
             ) : view === 'settings' ? (
-              <SettingsView settings={settings} onChange={setSettings} />
+              <SettingsView settings={settings} onReload={reload} />
             ) : null}
           </main>
 
           {isAdmin ? (
-          <nav className="fixed inset-x-4 bottom-4 z-40 grid grid-cols-4 gap-2 rounded-[999px] border border-white/10 bg-surface/90 p-2 shadow-float backdrop-blur xl:hidden">
+          <nav className="fixed inset-x-4 bottom-4 z-40 grid grid-cols-4 gap-2 rounded-[999px] border border-white/10 bg-surface/90 p-2 shadow-float backdrop-blur xl:hidden print:hidden">
             {viewItems.map((item) => {
               const Icon = item.icon;
               const active = view === item.id;
@@ -404,18 +542,31 @@ export default function MockMvpApp() {
       {isCreateOpen ? (
         <CreateAthleteModal settings={settings} onClose={() => setIsCreateOpen(false)} onCreate={createAthlete} />
       ) : null}
+
+      {editOpen && detailAthlete ? (
+        <CreateAthleteModal
+          settings={settings}
+          initial={detailAthlete}
+          title="Editar información"
+          submitLabel="Guardar cambios"
+          onClose={() => setEditOpen(false)}
+          onCreate={(data) => updateAthleteInfo(detailAthlete.id, data)}
+        />
+      ) : null}
     </div>
   );
 }
 
 function BrandBlock() {
   return (
-    <div className="mb-8 px-2">
+    <div className="mb-8 flex items-center gap-3 px-2">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/logo.jpg" alt="In Move" className="size-11 shrink-0 rounded-full object-cover ring-1 ring-border" />
       <div>
         <p className="text-2xl font-bold uppercase tracking-[-0.04em] leading-none">
           <span className="text-brand">IN</span>MOVE
         </p>
-        <p className="mt-2 text-xs text-muted-foreground">Centro de evaluacion y rendimiento</p>
+        <p className="mt-1 text-xs text-muted-foreground">Centro de rendimiento</p>
       </div>
     </div>
   );
@@ -431,18 +582,12 @@ function NavRail({ current, onChange }: { current: ViewId; onChange: (view: View
 
   return (
     <nav className="flex flex-col gap-2">
-      <button
-        type="button"
-        onClick={() => onChange('dashboard')}
-        className={`flex h-12 items-center gap-3 rounded-md px-3 text-left text-sm font-semibold transition ${
-          current === 'dashboard' ? 'bg-brand text-brand-foreground' : 'text-muted-foreground hover:bg-white/5 hover:text-foreground'
-        }`}
-      >
+      <div className="flex h-12 items-center gap-3 rounded-md px-3 text-sm font-semibold text-muted-foreground/45">
         <Home className="size-5" />
         Panel
-      </button>
+        <span className="ml-auto rounded-sm bg-white/5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">Pronto</span>
+      </div>
       {viewItems.map((item) => {
-        if (item.id === 'dashboard') return null;
         const Icon = item.icon;
         const active = current === item.id;
         return (
@@ -463,9 +608,10 @@ function NavRail({ current, onChange }: { current: ViewId; onChange: (view: View
       {secondaryItems.map((item) => {
         const Icon = item.icon;
         return (
-          <div key={item.label} className="flex h-11 items-center gap-3 rounded-md px-3 text-sm font-semibold text-muted-foreground/75">
+          <div key={item.label} className="flex h-11 items-center gap-3 rounded-md px-3 text-sm font-semibold text-muted-foreground/45">
             <Icon className="size-5" />
             {item.label}
+            <span className="ml-auto rounded-sm bg-white/5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">Pronto</span>
           </div>
         );
       })}
@@ -473,168 +619,309 @@ function NavRail({ current, onChange }: { current: ViewId; onChange: (view: View
   );
 }
 
-function AthletesView({
+function AthletesTable({
   athletes: visibleAthletes,
-  selected,
   categoryOptions,
   query,
   category,
   onQuery,
   onCategory,
   onCreate,
-  onSelect,
+  onOpen,
 }: {
   athletes: Athlete[];
-  selected: Athlete;
   categoryOptions: string[];
   query: string;
   category: string;
   onQuery: (query: string) => void;
   onCategory: (category: string) => void;
   onCreate: () => void;
-  onSelect: (athlete: Athlete) => void;
+  onOpen: (athlete: Athlete) => void;
 }) {
   return (
-    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
-      <section className="surface-1 rounded-lg p-4 md:p-5">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="text-sm font-medium text-muted-foreground">{visibleAthletes.length} deportistas visibles</p>
-            <h2 className="text-xl font-semibold">Selecciona un atleta para valorar</h2>
-          </div>
-          <Button onClick={onCreate}>
-            <UserRound />
-            Nuevo deportista
-          </Button>
+    <section className="surface-1 rounded-lg p-4 md:p-5">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="text-sm font-medium text-muted-foreground">{visibleAthletes.length} deportistas</p>
+          <h2 className="text-xl font-semibold">Listado de deportistas</h2>
         </div>
+        <Button onClick={onCreate}>
+          <UserRound />
+          Nuevo deportista
+        </Button>
+      </div>
 
-        <div className="mt-5 grid gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
-          <label className="flex h-12 items-center gap-3 rounded-sm border border-border bg-background px-3">
-            <Search className="size-5 text-muted-foreground" />
-            <input
-              value={query}
-              onChange={(event) => onQuery(event.target.value)}
-              placeholder="Buscar por nombre, codigo o documento"
-              className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-            />
-          </label>
-          <div className="flex h-12 items-center gap-2 rounded-sm border border-border bg-background px-3">
-            <ListFilter className="size-5 text-muted-foreground" />
-            <select
-              value={category}
-              onChange={(event) => onCategory(event.target.value)}
-              className="min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none"
-            >
-              {categoryOptions.map((groupName) => (
-                <option key={groupName} className="bg-surface text-foreground">
-                  {groupName}
-                </option>
-              ))}
-            </select>
-          </div>
+      <div className="mt-5 grid gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
+        <label className="flex h-12 items-center gap-3 rounded-sm border border-border bg-background px-3">
+          <Search className="size-5 text-muted-foreground" />
+          <input
+            value={query}
+            onChange={(event) => onQuery(event.target.value)}
+            placeholder="Buscar por nombre, codigo o documento"
+            className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+          />
+        </label>
+        <div className="flex h-12 items-center gap-2 rounded-sm border border-border bg-background px-3">
+          <ListFilter className="size-5 text-muted-foreground" />
+          <select
+            value={category}
+            onChange={(event) => onCategory(event.target.value)}
+            className="min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none"
+          >
+            {categoryOptions.map((groupName) => (
+              <option key={groupName} className="bg-surface text-foreground">
+                {groupName}
+              </option>
+            ))}
+          </select>
         </div>
+      </div>
 
-        <div className="mt-5 grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
-          {visibleAthletes.map((athlete) => (
-            <AthleteListCard key={athlete.id} athlete={athlete} selected={athlete.id === selected.id} onClick={() => onSelect(athlete)} />
-          ))}
+      <div className="mt-5 overflow-x-auto">
+        <table className="w-full min-w-[720px] border-collapse text-sm">
+          <thead>
+            <tr className="border-b border-border text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <th className="px-3 py-3">Deportista</th>
+              <th className="px-3 py-3">Codigo</th>
+              <th className="px-3 py-3">Categoria / Grupo</th>
+              <th className="px-3 py-3">Ultima ficha</th>
+              <th className="px-3 py-3">Estado</th>
+              <th className="px-3 py-3" />
+            </tr>
+          </thead>
+          <tbody>
+            {visibleAthletes.map((athlete) => {
+              const fichas = athlete.assessments.filter((a) => a.id);
+              const latest = fichas[0];
+              return (
+                <tr
+                  key={athlete.id}
+                  onClick={() => onOpen(athlete)}
+                  className="cursor-pointer border-b border-border/60 transition hover:bg-white/5"
+                >
+                  <td className="px-3 py-3">
+                    <div className="flex items-center gap-3">
+                      <Avatar name={athlete.name} photoUrl={athlete.photoUrl} />
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold">{athlete.name}</p>
+                        <p className="truncate text-xs text-muted-foreground">{athlete.sport} · {athlete.position}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-3 py-3 font-mono text-xs tracking-[0.14em] text-brand">{athlete.code}</td>
+                  <td className="px-3 py-3 text-muted-foreground">{athlete.category}{athlete.group ? ` · ${athlete.group}` : ''}</td>
+                  <td className="px-3 py-3 text-muted-foreground">{latest ? formatDate(latest.date) : 'Sin ficha'}</td>
+                  <td className="px-3 py-3"><StatusBadge level={athlete.status} label={athlete.statusLabel} size="sm" /></td>
+                  <td className="px-3 py-3 text-right">
+                    <span className="inline-flex items-center gap-1 text-sm font-semibold text-brand">
+                      Ver <ChevronRight className="size-4" />
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+            {visibleAthletes.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-3 py-10 text-center text-muted-foreground">
+                  No hay deportistas que coincidan con la búsqueda.
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function AthleteDetailView({
+  athlete,
+  isAdmin,
+  onBack,
+  onViewFicha,
+  onEditInfo,
+  onNewFicha,
+  onEditFicha,
+}: {
+  athlete: Athlete;
+  isAdmin: boolean;
+  onBack: () => void;
+  onViewFicha: (assessment: Assessment) => void;
+  onEditInfo: () => void;
+  onNewFicha: () => void;
+  onEditFicha: (assessment: Assessment) => void;
+}) {
+  const fichas = athlete.assessments.filter((a) => a.id);
+  const latest = fichas[0];
+
+  return (
+    <div className="grid gap-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Button variant="outline" size="sm" onClick={onBack}>
+          <ChevronLeft />
+          Volver
+        </Button>
+        <div className="flex flex-wrap gap-2">
+          {latest ? (
+            <Button size="sm" variant="outline" onClick={() => onViewFicha(latest)}>
+              <Eye />
+              Ver ficha completa
+            </Button>
+          ) : null}
+          {isAdmin ? (
+            <>
+              <Button size="sm" variant="outline" onClick={onEditInfo}>
+                <Pencil />
+                Editar información
+              </Button>
+              <Button size="sm" onClick={onNewFicha}>
+                <FilePlus />
+                Generar nueva ficha
+              </Button>
+            </>
+          ) : null}
+        </div>
+      </div>
+
+      <section className="surface-1 rounded-lg p-5">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="flex items-start gap-4">
+            <Avatar name={athlete.name} photoUrl={athlete.photoUrl} size="lg" />
+            <div className="min-w-0">
+              <p className="truncate text-2xl font-semibold">{athlete.name}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{athlete.category} · {athlete.group} · {athlete.sport} · {athlete.position}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <StatusBadge level={athlete.status} label={athlete.statusLabel} />
+                <span className="rounded-pill border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground">Codigo {athlete.code}</span>
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-3 sm:max-w-md">
+                <ReportFact label="Documento" value={athlete.document} />
+                <ReportFact label="Nacimiento" value={formatDate(athlete.birthDate)} />
+                <ReportFact label="Sexo" value={athlete.sex === 'M' ? 'Masculino' : 'Femenino'} />
+                <ReportFact label="Fichas" value={fichas.length} />
+              </div>
+            </div>
+          </div>
+          {latest ? (
+            <div className="rounded-lg border border-border bg-background/35 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-brand">Última ficha · {formatDate(latest.date)}</p>
+              <RadarChart data={latest.radar} compact />
+            </div>
+          ) : null}
         </div>
       </section>
 
-      <SelectedAthletePanel athlete={selected} />
+      <section className="surface-1 rounded-lg p-5">
+        <div className="mb-4 flex items-center gap-2">
+          <History className="size-5 text-brand" />
+          <h3 className="text-lg font-semibold">Histórico de fichas</h3>
+        </div>
+        {fichas.length === 0 ? (
+          <div className="rounded-md border border-dashed border-border bg-background/30 p-6 text-center">
+            <p className="text-sm text-muted-foreground">Aún no hay fichas para este deportista.</p>
+            {isAdmin ? (
+              <Button className="mt-4" size="sm" onClick={onNewFicha}>
+                <FilePlus />
+                Generar primera ficha
+              </Button>
+            ) : null}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {fichas.map((ficha, index) => (
+              <div key={ficha.id} className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-background/35 p-3">
+                <div className="flex items-center gap-3">
+                  <span className="grid size-9 place-items-center rounded-sm bg-brand/10 text-sm font-bold text-brand">{fichas.length - index}</span>
+                  <div>
+                    <p className="font-semibold">{formatDate(ficha.date)}{index === 0 ? ' · actual' : ''}</p>
+                    <p className="text-xs text-muted-foreground">Score {ficha.score}/100</p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={() => onViewFicha(ficha)}>
+                    <Eye />
+                    Ver
+                  </Button>
+                  {isAdmin ? (
+                    <Button size="sm" variant="outline" onClick={() => onEditFicha(ficha)}>
+                      <Pencil />
+                      Editar
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
-  );
-}
-
-function AthleteListCard({ athlete, selected, onClick }: { athlete: Athlete; selected: boolean; onClick: () => void }) {
-  const assessment = athlete.assessments[0];
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`surface-1 border-t-4 ${levelBorder[athlete.status]} min-h-[164px] rounded-lg p-4 text-left transition hover:-translate-y-0.5 hover:border-brand/60 ${
-        selected ? 'ring-2 ring-brand/60' : ''
-      }`}
-    >
-      <div className="flex items-start gap-3">
-        <Avatar name={athlete.name} photoUrl={athlete.photoUrl} />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-2">
-            <p className="truncate text-base font-semibold">{athlete.name}</p>
-            <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
-          </div>
-          <p className="mt-1 text-sm text-muted-foreground">{athlete.category} · {athlete.sport} · {athlete.position}</p>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <span className="rounded-sm bg-brand/10 px-2 py-1 font-mono text-xs tracking-[0.18em] text-brand">{athlete.code}</span>
-            <StatusBadge level={athlete.status} label={athlete.statusLabel} size="sm" />
-          </div>
-        </div>
-      </div>
-      <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-        <MiniStat label="Score" value={assessment.score} />
-        <MiniStat label="Categoria" value={athlete.category} />
-        <MiniStat label="CMJ" value={assessment.metrics.find((metric) => metric.label === 'CMJ')?.value ?? '-'} unit="cm" />
-      </div>
-    </button>
-  );
-}
-
-function SelectedAthletePanel({ athlete }: { athlete: Athlete }) {
-  const assessment = athlete.assessments[0];
-  return (
-    <aside className="surface-1 rounded-lg p-5 lg:sticky lg:top-[116px] lg:self-start">
-      <div className="flex items-start gap-4">
-        <Avatar name={athlete.name} photoUrl={athlete.photoUrl} size="lg" />
-        <div className="min-w-0">
-          <p className="truncate text-xl font-semibold">{athlete.name}</p>
-          <p className="mt-1 text-sm text-muted-foreground">{athlete.category} · {athlete.group} · {athlete.sport}</p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <StatusBadge level={athlete.status} label={athlete.statusLabel} />
-            <span className="rounded-pill border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground">
-              Codigo {athlete.code}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-6 grid grid-cols-2 gap-3">
-        <SummaryTile label="Score actual" value={assessment.score} suffix="/100" icon={ShieldCheck} />
-        <SummaryTile label="Valoracion" value={formatDate(assessment.date)} icon={CalendarDays} />
-      </div>
-
-      <div className="mt-5">
-        <RadarChart data={assessment.radar} compact />
-      </div>
-    </aside>
   );
 }
 
 function AssessmentView({
   athlete,
+  assessment,
+  assessmentId,
   isAdmin,
+  onBack,
+  onSave,
   onPhotoChange,
   onPreviewPublic,
 }: {
   athlete: Athlete;
+  assessment: Assessment;
+  assessmentId?: string;
   isAdmin: boolean;
+  onBack: () => void;
+  onSave: (draft: AssessmentDraftInput) => Promise<void>;
   onPhotoChange: (photoUrl: string) => void;
   onPreviewPublic: (assessment: Assessment) => void;
 }) {
-  const assessment = athlete.assessments[0];
-  const [draft, setDraft] = useState<AssessmentDraft>({
-    fat: String(assessment.metrics[0]?.value || ''),
-    restingHr: String(assessment.metrics[1]?.value || ''),
-    sitReach: String(assessment.metrics[2]?.value || ''),
-    cmj: String(assessment.metrics[3]?.value || ''),
-    weight: '57.4',
-    height: '162',
-    speed10m: athlete.id === 'samuel' ? '1.95' : '1.9',
-    squat1rm: assessment.radar[0]?.raw.replace(/[^\d.]/g, '') || '',
-    vo2: assessment.radar[2]?.raw.replace(/[^\d.]/g, '') || '',
-    notes: '',
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [draft, setDraft] = useState<AssessmentDraft>(() => {
+    const s = (v: number | string | null | undefined) => (v == null || v === '' ? '' : String(v));
+    const a = assessment.raw?.anthropometry ?? {};
+    const c = assessment.raw?.cardio ?? {};
+    const r = assessment.raw?.rom ?? {};
+    const f = assessment.raw?.flexibility ?? {};
+    const p = assessment.raw?.performance ?? {};
+    return {
+      weight: s(a.pesoKg), height: s(a.estaturaCm), fat: s(a.pctGrasa), masa: s(a.pctMasa),
+      restingHr: s(c.fcReposo), fcInicial: s(c.fcInicial), fcFinal: s(c.fcFinal), fcMax: s(c.fcMax),
+      colFlex: s(r.columnaFlexion), colExt: s(r.columnaExtension),
+      hombRotIntIzq: s(r.hombroRotIntIzq), hombRotIntDer: s(r.hombroRotIntDer),
+      hombRotExtIzq: s(r.hombroRotExtIzq), hombRotExtDer: s(r.hombroRotExtDer),
+      hombFlexIzq: s(r.hombroFlexionIzq), hombFlexDer: s(r.hombroFlexionDer),
+      caderaIzq: s(r.caderaFlexionIzq), caderaDer: s(r.caderaFlexionDer),
+      rodillaIzq: s(r.rodillaFlexionIzq), rodillaDer: s(r.rodillaFlexionDer),
+      otraLabel: s(r.otraLabel), otraValor: s(r.otraValor),
+      pruebaAplicada: s(f.pruebaAplicada), sitReach: s(f.resultadoCm), flexObs: s(f.observacion),
+      sj: s(p.sjCm), cmj: s(p.cmjCm), abalakov: s(p.abalakovCm),
+      saltoUniDer: s(p.saltoUnilateralDerCm), saltoUniIzq: s(p.saltoUnilateralIzqCm),
+      fuerzaMax: s(p.fuerzaMaximaKg), squat1rm: s(p.sentadilla1rmKg),
+      banca1rm: s(p.pressBanca1rmKg), pct1rm: s(p.pct1rmSentadilla),
+      speed10m: s(p.velocidad10mS), speed30m: s(p.velocidad30mS),
+      agilidad505: s(p.agilidad505S), vo2: s(p.vo2Ml),
+      notes: assessment.profile?.notes || '', plan: assessment.raw?.plan ?? '',
+    };
   });
   const updateDraft = (key: keyof AssessmentDraft, value: string) =>
     setDraft((current) => ({ ...current, [key]: value }));
+
+  // Helper compacto para los campos de la ficha completa.
+  const F = (label: string, k: keyof AssessmentDraft, ph = '', mode: 'decimal' | 'numeric' | 'text' = 'decimal') => (
+    <FormField label={label}>
+      <input
+        disabled={!isAdmin}
+        inputMode={mode === 'text' ? undefined : mode}
+        value={draft[k]}
+        onChange={(event) => updateDraft(k, event.target.value)}
+        placeholder={ph}
+        className="field-control"
+      />
+    </FormField>
+  );
 
   const fatValue = toNumber(draft.fat);
   const restingHrValue = toNumber(draft.restingHr);
@@ -684,18 +971,39 @@ function AssessmentView({
   return (
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1.02fr)_minmax(380px,0.98fr)]">
       <section className="surface-1 rounded-lg p-4 md:p-5">
+        <div className="mb-4 flex items-center justify-between print:hidden">
+          <Button variant="outline" size="sm" onClick={onBack}>
+            <ChevronLeft />
+            Volver
+          </Button>
+        </div>
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
-            <p className="text-sm font-semibold text-brand">Ficha activa</p>
+            <p className="text-sm font-semibold text-brand">{assessmentId ? 'Editar ficha' : 'Nueva ficha'}</p>
             <h2 className="text-2xl font-semibold">{athlete.name}</h2>
             <p className="mt-1 text-sm text-muted-foreground">
               {athlete.code} · {athlete.group} · {formatDate(assessment.date)}
             </p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
-            <Button disabled={!isAdmin}>
+            <Button
+              disabled={!isAdmin || saving}
+              onClick={async () => {
+                setSaving(true);
+                try {
+                  await onSave(draft);
+                  setSaved(true);
+                  setTimeout(() => setSaved(false), 2500);
+                } catch (error) {
+                  console.error(error);
+                  alert('No se pudo guardar la valoración.');
+                } finally {
+                  setSaving(false);
+                }
+              }}
+            >
               <Check />
-              Guardar valoracion
+              {saving ? 'Guardando…' : saved ? 'Guardado ✓' : 'Guardar valoracion'}
             </Button>
             <Button variant="outline" onClick={() => onPreviewPublic(liveAssessment)}>
               <Eye />
@@ -790,9 +1098,69 @@ function AssessmentView({
           <FormField label="Resistencia VO2max (ml/kg)">
             <input disabled={!isAdmin} inputMode="decimal" value={draft.vo2} onChange={(event) => updateDraft('vo2', event.target.value)} placeholder="52" className="field-control" />
           </FormField>
-          <FormField label="Observaciones">
-            <input disabled={!isAdmin} value={draft.notes} onChange={(event) => updateDraft('notes', event.target.value)} placeholder="Notas de la valoracion" className="field-control" />
-          </FormField>
+        </div>
+
+        <h3 className="mt-8 mb-3 text-sm font-bold uppercase tracking-wide text-brand">Antropometría</h3>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {F('% Masa corporal (magra)', 'masa', 'Ej. 34')}
+        </div>
+
+        <h3 className="mt-8 mb-3 text-sm font-bold uppercase tracking-wide text-brand">Control cardiovascular</h3>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {F('FC inicial (ppm)', 'fcInicial', 'Ej. 80', 'numeric')}
+          {F('FC final (ppm)', 'fcFinal', 'Ej. 150', 'numeric')}
+          {F('FC máxima (ppm)', 'fcMax', 'Ej. 195', 'numeric')}
+        </div>
+
+        <h3 className="mt-8 mb-3 text-sm font-bold uppercase tracking-wide text-brand">Movilidad y flexibilidad (ROM · grados)</h3>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {F('Columna · Flexión', 'colFlex', 'Ej. 76')}
+          {F('Columna · Extensión', 'colExt', 'Ej. 38')}
+          {F('Hombro rot. int. IZQ', 'hombRotIntIzq')}
+          {F('Hombro rot. int. DER', 'hombRotIntDer')}
+          {F('Hombro rot. ext. IZQ', 'hombRotExtIzq')}
+          {F('Hombro rot. ext. DER', 'hombRotExtDer')}
+          {F('Hombro flexión IZQ', 'hombFlexIzq')}
+          {F('Hombro flexión DER', 'hombFlexDer')}
+          {F('Cadera flexión IZQ', 'caderaIzq')}
+          {F('Cadera flexión DER', 'caderaDer')}
+          {F('Rodilla flexión IZQ', 'rodillaIzq')}
+          {F('Rodilla flexión DER', 'rodillaDer')}
+          {F('Otra prueba (etiqueta)', 'otraLabel', 'Ej. Tobillo', 'text')}
+          {F('Otra prueba (valor)', 'otraValor')}
+        </div>
+
+        <h3 className="mt-8 mb-3 text-sm font-bold uppercase tracking-wide text-brand">Flexibilidad</h3>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {F('Prueba aplicada', 'pruebaAplicada', 'Ej. Sit and Reach', 'text')}
+          {F('Observación flexibilidad', 'flexObs', 'Opcional', 'text')}
+        </div>
+
+        <h3 className="mt-8 mb-3 text-sm font-bold uppercase tracking-wide text-brand">Rendimiento · saltos</h3>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {F('Squat Jump (cm)', 'sj')}
+          {F('Abalakov (cm)', 'abalakov')}
+          {F('Salto unilateral DER (cm)', 'saltoUniDer')}
+          {F('Salto unilateral IZQ (cm)', 'saltoUniIzq')}
+        </div>
+
+        <h3 className="mt-8 mb-3 text-sm font-bold uppercase tracking-wide text-brand">Rendimiento · fuerza</h3>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {F('Fuerza máxima (kg)', 'fuerzaMax')}
+          {F('Press de banca 1RM (kg)', 'banca1rm')}
+          {F('% 1RM sentadilla', 'pct1rm')}
+        </div>
+
+        <h3 className="mt-8 mb-3 text-sm font-bold uppercase tracking-wide text-brand">Rendimiento · velocidad y agilidad</h3>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {F('30 metros (s)', 'speed30m', 'Ej. 4.5')}
+          {F('Test 5-10-5 (s)', 'agilidad505', 'Ej. 5.2')}
+        </div>
+
+        <h3 className="mt-8 mb-3 text-sm font-bold uppercase tracking-wide text-brand">Observaciones y plan</h3>
+        <div className="grid gap-4 md:grid-cols-2">
+          {F('Observaciones generales', 'notes', 'Notas de la valoración', 'text')}
+          {F('Plan / recomendaciones', 'plan', 'Recomendaciones para el deportista', 'text')}
         </div>
 
         <div className="mt-6 rounded-md border border-border bg-background/45 p-4">
@@ -1451,20 +1819,24 @@ type NewAthleteFormData = {
   sport: string;
   position: string;
   photoUrl?: string;
+  photoFile?: File | null;
 };
 
 function PhotoCaptureControls({
   onPhoto,
   onFileName,
+  onFile,
   compact = false,
 }: {
   onPhoto: (photoUrl: string) => void;
   onFileName?: (fileName: string) => void;
+  onFile?: (file: File) => void;
   compact?: boolean;
 }) {
   function handleFile(file: File | undefined) {
     if (!file) return;
     onFileName?.(file.name);
+    onFile?.(file);
     onPhoto(URL.createObjectURL(file));
   }
 
@@ -1501,33 +1873,42 @@ function PhotoCaptureControls({
 
 function CreateAthleteModal({
   settings,
+  initial,
+  title = 'Nuevo deportista',
+  submitLabel = 'Crear y valorar',
   onClose,
   onCreate,
 }: {
   settings: ProductSettings;
+  initial?: Athlete;
+  title?: string;
+  submitLabel?: string;
   onClose: () => void;
   onCreate: (data: NewAthleteFormData) => void;
 }) {
   const [form, setForm] = useState<NewAthleteFormData>({
-    name: '',
-    document: '',
-    birthDate: '2011-01-01',
-    sex: 'M',
-    category: settings.categories[0] ?? 'Personalizado',
-    group: settings.groups[0] ?? 'General',
-    sport: settings.sports[0] ?? 'General',
-    position: settings.positions[0] ?? 'General',
+    name: initial?.name ?? '',
+    document: initial?.document ?? '',
+    birthDate: initial?.birthDate ?? '2011-01-01',
+    sex: initial?.sex ?? 'M',
+    category: initial?.category || settings.categories[0] || 'Personalizado',
+    group: initial?.group || settings.groups[0] || 'General',
+    sport: initial?.sport || settings.sports[0] || 'General',
+    position: initial?.position || settings.positions[0] || 'General',
+    photoUrl: initial?.photoUrl,
   });
   const [fileName, setFileName] = useState('');
+  const [submitting, setSubmitting] = useState(false);
   const canCreate = form.name.trim().length > 2 && form.document.trim().length > 4;
 
   function update<K extends keyof NewAthleteFormData>(key: K, value: NewAthleteFormData[K]) {
     setForm((current) => ({ ...current, [key]: value }));
   }
 
-  function submit() {
-    if (!canCreate) return;
-    onCreate(form);
+  async function submit() {
+    if (!canCreate || submitting) return;
+    setSubmitting(true);
+    await onCreate(form);
   }
 
   return (
@@ -1535,10 +1916,10 @@ function CreateAthleteModal({
       <section className="surface-2 max-h-[92dvh] w-full max-w-4xl overflow-y-auto rounded-lg p-4 shadow-float md:p-6">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand">Nuevo deportista</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand">{title}</p>
             <h2 className="mt-1 text-2xl font-semibold">Datos basicos y categoria</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Mock funcional: al guardar se genera codigo de 8 digitos y queda listo para valorar.
+              {initial ? 'Actualiza los datos del deportista.' : 'Al guardar se genera un código único de 8 dígitos.'}
             </p>
           </div>
           <button type="button" onClick={onClose} className="grid size-11 place-items-center rounded-md border border-border text-muted-foreground">
@@ -1561,6 +1942,7 @@ function CreateAthleteModal({
             <PhotoCaptureControls
               onFileName={setFileName}
               onPhoto={(photoUrl) => update('photoUrl', photoUrl)}
+              onFile={(file) => update('photoFile', file)}
             />
           </div>
 
@@ -1605,9 +1987,9 @@ function CreateAthleteModal({
 
         <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
           <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
-          <Button type="button" onClick={submit} disabled={!canCreate}>
+          <Button type="button" onClick={submit} disabled={!canCreate || submitting}>
             <Plus />
-            Crear y valorar
+            {submitting ? 'Guardando…' : submitLabel}
           </Button>
         </div>
       </section>
@@ -1615,13 +1997,13 @@ function CreateAthleteModal({
   );
 }
 
-function SettingsView({ settings, onChange }: { settings: ProductSettings; onChange: (settings: ProductSettings) => void }) {
+function SettingsView({ settings, onReload }: { settings: ProductSettings; onReload: () => Promise<void> }) {
   return (
     <div className="grid gap-5 xl:grid-cols-2">
-      <SettingsList title="Categorias de atencion" description="Segmenta el listado y el flujo comercial." field="categories" values={settings.categories} settings={settings} onChange={onChange} />
-      <SettingsList title="Grupos" description="Equipos o cohortes para reportes." field="groups" values={settings.groups} settings={settings} onChange={onChange} />
-      <SettingsList title="Deportes" description="Opciones del perfil del deportista." field="sports" values={settings.sports} settings={settings} onChange={onChange} />
-      <SettingsList title="Perfiles / posiciones" description="Rol deportivo o enfoque de entrenamiento." field="positions" values={settings.positions} settings={settings} onChange={onChange} />
+      <SettingsList title="Categorías" description="Tipos de atención del deportista." kind="category" values={settings.categories} onReload={onReload} />
+      <SettingsList title="Grupos" description="Equipos o cohortes (ej. Running, Cofisam)." kind="group" values={settings.groups} onReload={onReload} />
+      <SettingsList title="Deportes" description="Opciones del perfil del deportista." kind="sport" values={settings.sports} onReload={onReload} />
+      <SettingsList title="Perfiles / posiciones" description="Rol deportivo o enfoque de entrenamiento." kind="position" values={settings.positions} onReload={onReload} />
     </div>
   );
 }
@@ -1629,65 +2011,108 @@ function SettingsView({ settings, onChange }: { settings: ProductSettings; onCha
 function SettingsList({
   title,
   description,
-  field,
+  kind,
   values,
-  settings,
-  onChange,
+  onReload,
 }: {
   title: string;
   description: string;
-  field: keyof ProductSettings;
+  kind: CatalogKind;
   values: string[];
-  settings: ProductSettings;
-  onChange: (settings: ProductSettings) => void;
+  onReload: () => Promise<void>;
 }) {
   const [draft, setDraft] = useState('');
-  const updateValues = (next: string[]) => onChange({ ...settings, [field]: next });
+  const [busy, setBusy] = useState(false);
+
+  async function run(op: Promise<unknown>) {
+    setBusy(true);
+    try {
+      await op;
+      await onReload();
+    } catch (error) {
+      console.error(error);
+      alert('No se pudo guardar el cambio.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function add() {
+    const next = draft.trim();
+    if (!next || busy) return;
+    setDraft('');
+    await run(api.addCatalogItem(kind, next));
+  }
 
   return (
     <section className="surface-1 rounded-lg p-4 md:p-5">
       <SectionHeader eyebrow="Editable" title={title} />
       <p className="-mt-2 mb-4 text-sm text-muted-foreground">{description}</p>
       <div className="space-y-2">
-        {values.map((value, index) => (
-          <div key={`${value}-${index}`} className="flex min-h-12 items-center gap-2 rounded-md border border-border bg-background/35 px-3">
-            <input
-              value={value}
-              onChange={(event) => updateValues(values.map((item, i) => (i === index ? event.target.value : item)))}
-              className="min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none"
-            />
-            <button
-              type="button"
-              onClick={() => updateValues(values.filter((_, i) => i !== index))}
-              className="grid size-9 place-items-center rounded-sm text-muted-foreground hover:bg-white/5 hover:text-foreground"
-            >
-              <X className="size-4" />
-            </button>
-          </div>
+        {values.map((value) => (
+          <CatalogRow
+            key={value}
+            value={value}
+            disabled={busy}
+            onRename={(newLabel) => run(api.renameCatalogItem(kind, value, newLabel))}
+            onDelete={() => run(api.deleteCatalogItem(kind, value))}
+          />
         ))}
+        {values.length === 0 ? <p className="text-sm text-muted-foreground">Sin opciones aún.</p> : null}
       </div>
       <div className="mt-4 flex gap-2">
         <input
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
-          placeholder="Nueva opcion"
+          onKeyDown={(event) => event.key === 'Enter' && add()}
+          placeholder="Nueva opción"
           className="field-control"
         />
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => {
-            const next = draft.trim();
-            if (!next) return;
-            updateValues([...values, next]);
-            setDraft('');
-          }}
-        >
+        <Button type="button" variant="outline" onClick={add} disabled={busy}>
           <Plus />
           Agregar
         </Button>
       </div>
     </section>
+  );
+}
+
+function CatalogRow({
+  value,
+  disabled,
+  onRename,
+  onDelete,
+}: {
+  value: string;
+  disabled: boolean;
+  onRename: (newLabel: string) => void;
+  onDelete: () => void;
+}) {
+  const [local, setLocal] = useState(value);
+  useEffect(() => setLocal(value), [value]);
+
+  return (
+    <div className="flex min-h-12 items-center gap-2 rounded-md border border-border bg-background/35 px-3">
+      <input
+        value={local}
+        disabled={disabled}
+        onChange={(event) => setLocal(event.target.value)}
+        onBlur={() => {
+          const clean = local.trim();
+          if (clean && clean !== value) onRename(clean);
+          else setLocal(value);
+        }}
+        className="min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none"
+      />
+      <button
+        type="button"
+        onClick={onDelete}
+        disabled={disabled}
+        className="grid size-9 place-items-center rounded-sm text-muted-foreground hover:bg-white/5 hover:text-foreground"
+      >
+        <X className="size-4" />
+      </button>
+    </div>
   );
 }
 

@@ -38,10 +38,8 @@ export const metadata: Metadata = {
     title: 'In Move',
   },
   formatDetection: { telephone: false },
-  icons: {
-    icon: [{ url: '/icons/icon.svg', type: 'image/svg+xml' }],
-    apple: [{ url: '/icons/apple-touch-icon.png', sizes: '180x180' }],
-  },
+  // El favicon y el apple-icon salen de src/app/icon.png y src/app/apple-icon.png
+  // (convención de archivos de Next), generados desde el logo de In Move.
 };
 
 export const viewport: Viewport = {

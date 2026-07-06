@@ -264,3 +264,50 @@
     @apply h-12 w-full min-w-0 rounded-sm border border-border bg-background px-3 text-sm font-semibold text-foreground outline-none transition placeholder:text-muted-foreground focus:border-brand focus:ring-2 focus:ring-brand/25;
   }
 }
+
+/* ==========================================================================
+   IMPRESIÓN / PDF de la ficha (window.print → "Guardar como PDF")
+   La app es tema oscuro; para el PDF forzamos paleta clara y A4, y ocultamos
+   todo el cromo (nav/header/botones) dejando solo la ficha.
+   ========================================================================== */
+@media print {
+  :root {
+    --background: 0 0% 100%;
+    --surface: 0 0% 100%;
+    --surface-2: 220 12% 96%;
+    --foreground: 222 14% 9%;
+    --muted-foreground: 222 10% 35%;
+    --level-danger: 3 68% 48%;
+    --level-warning: 41 92% 42%;
+    --level-good: 146 68% 34%;
+    --level-elite: 214 84% 50%;
+    --surface-1: rgba(8, 14, 18, 0.03);
+    --border: 222 16% 82%;
+    color-scheme: light;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+  }
+
+  /* Quita gradientes/imágenes de fondo (p. ej. el radial del shell). */
+  body * {
+    background-image: none !important;
+    box-shadow: none !important;
+  }
+
+  .ficha-print,
+  .ficha-print * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .ficha-print section {
+    break-inside: avoid;
+  }
+
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
+}
