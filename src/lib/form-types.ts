@@ -53,11 +53,13 @@ export type AssessmentDraftInput = {
   abalakov: string;
   saltoUniDer: string;
   saltoUniIzq: string;
-  // Rendimiento — fuerza (sentadilla/banca por explosividad: kg + segundos)
+  // Rendimiento — fuerza (sentadilla/banca por velocidad media: desplazamiento + segundos)
   fuerzaMax: string;
   squat1rm: string;
+  squatDist: string;
   squatSeg: string;
   banca1rm: string;
+  bancaDist: string;
   bancaSeg: string;
   pct1rm: string;
   // Rendimiento — velocidad / agilidad
@@ -79,7 +81,7 @@ export const emptyDraft: AssessmentDraftInput = {
   otraLabel: '', otraValor: '',
   pruebaAplicada: '', sitReach: '', flexObs: '',
   sj: '', cmj: '', abalakov: '', saltoUniDer: '', saltoUniIzq: '',
-  fuerzaMax: '', squat1rm: '', squatSeg: '', banca1rm: '', bancaSeg: '', pct1rm: '',
+  fuerzaMax: '', squat1rm: '', squatDist: '', squatSeg: '', banca1rm: '', bancaDist: '', bancaSeg: '', pct1rm: '',
   speed10m: '', speed30m: '', agilidad505: '', vo2: '',
   notes: '', plan: '',
 };
