@@ -969,8 +969,8 @@ function AssessmentView({
       sj: s(p.sjCm), cmj: s(p.cmjCm), abalakov: s(p.abalakovCm),
       saltoUniDer: s(p.saltoUnilateralDerCm), saltoUniIzq: s(p.saltoUnilateralIzqCm),
       fuerzaMax: s(p.fuerzaMaximaKg),
-      squat1rm: s(p.sentadilla1rmKg), squatSeg: s(p.sentadillaSeg),
-      banca1rm: s(p.pressBanca1rmKg), bancaSeg: s(p.pressBancaSeg),
+      squat1rm: s(p.sentadilla1rmKg), squatDist: s(p.sentadillaDesplazamientoM), squatSeg: s(p.sentadillaSeg),
+      banca1rm: s(p.pressBanca1rmKg), bancaDist: s(p.pressBancaDesplazamientoM), bancaSeg: s(p.pressBancaSeg),
       pct1rm: s(p.pct1rmSentadilla),
       speed10m: s(p.velocidad10mS), speed30m: s(p.velocidad30mS),
       agilidad505: s(p.agilidad505S), vo2: s(p.vo2Ml),
@@ -1004,10 +1004,10 @@ function AssessmentView({
     weightValue != null && heightValue != null && heightValue > 0
       ? weightValue / (heightValue / 100) ** 2
       : null;
-  const expl = (kgKey: keyof AssessmentDraft, segKey: keyof AssessmentDraft) => {
-    const kg = toNumber(draft[kgKey]);
+  const avgVelocity = (metersKey: keyof AssessmentDraft, segKey: keyof AssessmentDraft) => {
+    const meters = toNumber(draft[metersKey]);
     const sg = toNumber(draft[segKey]);
-    return kg != null && sg != null && sg > 0 ? (kg / sg).toFixed(1) : null;
+    return meters != null && sg != null && sg > 0 ? (meters / sg).toFixed(2) : null;
   };
   const speed10mValue = toNumber(draft.speed10m);
   const squatValue = toNumber(draft.squat1rm);
@@ -1224,33 +1224,35 @@ function AssessmentView({
           {F('Salto unilateral IZQ (cm)', 'saltoUniIzq')}
         </div>
 
-        <h3 className="mt-8 mb-3 text-sm font-bold uppercase tracking-wide text-brand">Rendimiento · fuerza y explosividad</h3>
+        <h3 className="mt-8 mb-3 text-sm font-bold uppercase tracking-wide text-brand">Rendimiento · fuerza y velocidad media</h3>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {F('Fuerza máxima (kg)', 'fuerzaMax')}
           {F('% 1RM sentadilla', 'pct1rm')}
         </div>
         <p className="mt-3 text-xs text-muted-foreground">
-          Explosividad = carga levantada ÷ tiempo (con encoder). Ej. 20 kg en 3.2 s → 6.3 kg/s.
+          Velocidad media = desplazamiento / tiempo (con encoder). Ej. 0.65 m en 1.2 s {'->'} 0.54 m/s.
         </p>
         <div className="mt-3 grid gap-4 md:grid-cols-2">
           <div className="rounded-md border border-border bg-background/35 p-4">
             <p className="mb-3 text-sm font-semibold text-foreground">Sentadilla</p>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-3 sm:grid-cols-3">
               {F('Carga (kg)', 'squat1rm', 'Ej. 20')}
+              {F('Desplazamiento (m)', 'squatDist', 'Ej. 0.65')}
               {F('Tiempo (s)', 'squatSeg', 'Ej. 3.2')}
             </div>
             <p className="mt-2 text-sm font-semibold text-brand">
-              Explosividad: {expl('squat1rm', 'squatSeg') ?? '—'} {expl('squat1rm', 'squatSeg') ? 'kg/s' : ''}
+              Velocidad media: {avgVelocity('squatDist', 'squatSeg') ?? '—'} {avgVelocity('squatDist', 'squatSeg') ? 'm/s' : ''}
             </p>
           </div>
           <div className="rounded-md border border-border bg-background/35 p-4">
             <p className="mb-3 text-sm font-semibold text-foreground">Press de banca</p>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-3 sm:grid-cols-3">
               {F('Carga (kg)', 'banca1rm', 'Ej. 30')}
+              {F('Desplazamiento (m)', 'bancaDist', 'Ej. 0.45')}
               {F('Tiempo (s)', 'bancaSeg', 'Ej. 2.8')}
             </div>
             <p className="mt-2 text-sm font-semibold text-brand">
-              Explosividad: {expl('banca1rm', 'bancaSeg') ?? '—'} {expl('banca1rm', 'bancaSeg') ? 'kg/s' : ''}
+              Velocidad media: {avgVelocity('bancaDist', 'bancaSeg') ?? '—'} {avgVelocity('bancaDist', 'bancaSeg') ? 'm/s' : ''}
             </p>
           </div>
         </div>

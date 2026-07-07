@@ -60,8 +60,10 @@ export const performanceSchema = z.object({
   saltoUnilateralIzqCm: z.number().optional(),
   fuerzaMaximaKg: z.number().optional(),
   sentadilla1rmKg: z.number().optional(),
-  sentadillaSeg: z.number().optional(), // tiempo de ejecución (explosividad, encoder)
+  sentadillaDesplazamientoM: z.number().optional(),
+  sentadillaSeg: z.number().optional(), // tiempo de ejecucion con encoder
   pressBanca1rmKg: z.number().optional(),
+  pressBancaDesplazamientoM: z.number().optional(),
   pressBancaSeg: z.number().optional(),
   pct1rmSentadilla: z.number().optional(),
   velocidad10mS: z.number().optional(),

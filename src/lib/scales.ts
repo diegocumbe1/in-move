@@ -60,9 +60,9 @@ export const classifyBmi = (value: number | null | undefined) => {
   return { level: 'danger' as Level, label: 'Obesidad', range: '≥ 30' };
 };
 
-/** Explosividad = carga(kg) / tiempo(s). Índice simple de potencia con encoder. */
-export const explosiveness = (kg: number | null | undefined, seconds: number | null | undefined) =>
-  kg == null || seconds == null || seconds <= 0 ? null : kg / seconds;
+/** Velocidad media = desplazamiento(m) / tiempo(s), medida con encoder. */
+export const averageVelocity = (meters: number | null | undefined, seconds: number | null | undefined) =>
+  meters == null || seconds == null || seconds <= 0 ? null : meters / seconds;
 
 export const classifyFat = (sex: Athlete['sex'], value: number | null | undefined) => {
   if (value == null) return noData;
