@@ -54,18 +54,23 @@ export type AssessmentDraftInput = {
   abalakov: string;
   saltoUniDer: string;
   saltoUniIzq: string;
-  // Rendimiento — fuerza (sentadilla/banca por velocidad media: desplazamiento + segundos)
+  // Rendimiento — fuerza con encoder lineal (CSV: Carga, Vm, Potencia, 1RM, % 1RM)
   fuerzaMax: string;
+  squatLoad: string;
   squat1rm: string;
-  squatDist: string;
-  squatSeg: string;
-  banca1rm: string;
-  bancaDist: string;
-  bancaSeg: string;
+  squatVm: string;
+  squatPower: string;
   pct1rm: string;
+  bancaLoad: string;
+  banca1rm: string;
+  bancaVm: string;
+  bancaPower: string;
+  bancaPct1rm: string;
   // Rendimiento — velocidad / agilidad
   speed10m: string;
+  speed20m: string;
   speed30m: string;
+  agilityLabel: string;
   agilidad505: string;
   vo2: string;
   // Observaciones
@@ -82,7 +87,9 @@ export const emptyDraft: AssessmentDraftInput = {
   otraLabel: '', otraValor: '',
   pruebaAplicada: '', sitReach: '', flexObs: '',
   sj: '', cmj: '', abalakov: '', saltoUniDer: '', saltoUniIzq: '',
-  fuerzaMax: '', squat1rm: '', squatDist: '', squatSeg: '', banca1rm: '', bancaDist: '', bancaSeg: '', pct1rm: '',
-  speed10m: '', speed30m: '', agilidad505: '', vo2: '',
+  fuerzaMax: '',
+  squatLoad: '', squat1rm: '', squatVm: '', squatPower: '', pct1rm: '',
+  bancaLoad: '', banca1rm: '', bancaVm: '', bancaPower: '', bancaPct1rm: '',
+  speed10m: '', speed20m: '', speed30m: '', agilityLabel: '', agilidad505: '', vo2: '',
   notes: '', plan: '',
 };

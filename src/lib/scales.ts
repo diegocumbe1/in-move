@@ -16,6 +16,8 @@ export const normalizeSpeed = (seconds: number | null | undefined) =>
   seconds == null || seconds <= 0 ? 0 : clampScore(((2.4 - seconds) / (2.4 - 1.5)) * 100);
 export const kmhFrom10m = (seconds: number | null | undefined) =>
   seconds == null || seconds <= 0 ? null : (10 / seconds) * 3.6;
+export const kmhFromSprint = (meters: number, seconds: number | null | undefined) =>
+  seconds == null || seconds <= 0 ? null : (meters / seconds) * 3.6;
 
 export const yearsBetween = (fromDate: string, toDate: string) => {
   if (!fromDate || !toDate) return null;
@@ -45,11 +47,14 @@ export const biologicalAge = (
 
 const noData = { level: 'warning' as Level, label: 'Sin dato', range: 'Pendiente' };
 
-/** Índice de Masa Corporal = peso(kg) / estatura(m)². */
+/** IMC manual: por ahora no se calcula desde peso/estatura; se captura en el formulario. */
 export const bmi = (weightKg: number | null | undefined, heightCm: number | null | undefined) => {
+  return null;
+  /*
   if (weightKg == null || heightCm == null || heightCm <= 0) return null;
   const m = heightCm / 100;
   return weightKg / (m * m);
+  */
 };
 
 export const classifyBmi = (value: number | null | undefined) => {
@@ -60,7 +65,7 @@ export const classifyBmi = (value: number | null | undefined) => {
   return { level: 'danger' as Level, label: 'Obesidad', range: '≥ 30' };
 };
 
-/** Velocidad media = desplazamiento(m) / tiempo(s), medida con encoder. */
+/** Legacy: antes se derivaba velocidad desde desplazamiento/tiempo; el encoder ahora entrega Vm directamente. */
 export const averageVelocity = (meters: number | null | undefined, seconds: number | null | undefined) =>
   meters == null || seconds == null || seconds <= 0 ? null : meters / seconds;
 
@@ -124,13 +129,18 @@ export function buildAssessment(
   const fat = m.anthropometry?.pctGrasa ?? null;
   const weight = m.anthropometry?.pesoKg ?? null;
   const height = m.anthropometry?.estaturaCm ?? null;
+  const imc = m.anthropometry?.imc ?? null;
   const restingHr = m.cardio?.fcReposo ?? null;
   const sitReach = m.flexibility?.resultadoCm ?? null;
   const cmj = m.performance?.cmjCm ?? null;
   const speed10m = m.performance?.velocidad10mS ?? null;
+  const speed20m = m.performance?.velocidad20mS ?? null;
+  const speed30m = m.performance?.velocidad30mS ?? null;
+  const sprintDistance = speed10m != null ? 10 : speed20m != null ? 20 : 30;
+  const sprintSeconds = speed10m ?? speed20m ?? speed30m;
   const squat = m.performance?.sentadilla1rmKg ?? null;
   const vo2 = m.performance?.vo2Ml ?? null;
-  const kmh = kmhFrom10m(speed10m);
+  const kmh = kmhFromSprint(sprintDistance, sprintSeconds);
 
   const fatStatus = classifyFat(sex, fat);
   const hrStatus = classifyRestingHr(restingHr);
@@ -146,7 +156,7 @@ export function buildAssessment(
 
   const radar: RadarMetric[] = [
     { key: 'strength', label: 'Fuerza maxima', shortLabel: 'Fuerza', score: normalize(squat, 40, 140), team: 70, raw: squat == null ? 'Sin dato' : `${squat} kg`, source: 'Sentadilla 1RM' },
-    { key: 'speed', label: 'Velocidad punta', shortLabel: 'Velocidad', score: normalizeSpeed(speed10m), team: 68, raw: kmh == null ? 'Sin dato' : `${kmh.toFixed(1)} km/h`, source: 'Sprint 10 m' },
+    { key: 'speed', label: 'Velocidad punta', shortLabel: 'Velocidad', score: normalizeSpeed(sprintSeconds == null ? null : sprintSeconds * (10 / sprintDistance)), team: 68, raw: kmh == null ? 'Sin dato' : `${kmh.toFixed(1)} km/h`, source: `Sprint ${sprintDistance} m` },
     { key: 'endurance', label: 'Resistencia', shortLabel: 'Resistencia', score: normalize(vo2, 30, 65), team: 66, raw: vo2 == null ? 'Sin dato' : `${vo2} ml/kg`, source: 'VO2max' },
     { key: 'jump', label: 'Altura de salto', shortLabel: 'Salto', score: normalize(cmj, 15, 55), team: 61, raw: cmj == null ? 'Sin dato' : `${cmj} cm`, source: 'CMJ' },
   ];
@@ -160,6 +170,7 @@ export function buildAssessment(
     profile: {
       weight,
       height,
+      bmi: imc,
       chronologicalAge: chronologicalAge(birthDate, assessedOn),
       biologicalAge: biologicalAge(sex, birthDate, assessedOn, height),
       speed10m,

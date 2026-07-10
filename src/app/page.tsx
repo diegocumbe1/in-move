@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Activity,
@@ -94,6 +94,15 @@ const demoBodyProfile: Record<string, { weight: number; height: number; notes: s
 const defaultAthletePhoto = '/images/default-athlete.svg';
 
 type AssessmentDraft = AssessmentDraftInput;
+type SprintDistance = '10' | '20' | '30';
+
+const PULL_THRESHOLD = 82;
+const PULL_MAX = 112;
+const sprintDistances: Array<{ value: SprintDistance; label: string; key: keyof AssessmentDraft; placeholder: string }> = [
+  { value: '10', label: '10 m', key: 'speed10m', placeholder: 'Ej. 1.90' },
+  { value: '20', label: '20 m', key: 'speed20m', placeholder: 'Ej. 3.20' },
+  { value: '30', label: '30 m', key: 'speed30m', placeholder: 'Ej. 4.50' },
+];
 
 const toNumber = (value: string) => {
   const parsed = Number(value.replace(',', '.'));
@@ -105,7 +114,14 @@ const normalize = (value: number | null, min: number, max: number) =>
   value == null ? 0 : clampScore(((value - min) / (max - min)) * 100);
 const normalizeSpeed = (seconds: number | null) =>
   seconds == null || seconds <= 0 ? 0 : clampScore(((2.4 - seconds) / (2.4 - 1.5)) * 100);
-const kmhFrom10m = (seconds: number | null) => (seconds == null || seconds <= 0 ? null : (10 / seconds) * 3.6);
+const kmhFromSprint = (meters: number, seconds: number | null) =>
+  seconds == null || seconds <= 0 ? null : (meters / seconds) * 3.6;
+const calcPct1rm = (loadKg: string, oneRmKg: string) => {
+  const load = toNumber(loadKg);
+  const oneRm = toNumber(oneRmKg);
+  if (load == null || oneRm == null || oneRm <= 0) return '';
+  return ((load / oneRm) * 100).toFixed(1);
+};
 const yearsBetween = (fromDate: string, toDate: string) => {
   if (!fromDate || !toDate) return null;
   const from = new Date(`${fromDate}T12:00:00`);
@@ -265,6 +281,7 @@ export default function MockMvpApp() {
     setMockAthletes(data.athletes);
     setSettings(data.settings);
     setFichaThemeState(data.fichaTheme);
+    router.refresh();
   }
 
   async function changeFichaTheme(theme: FichaTheme) {
@@ -461,71 +478,73 @@ export default function MockMvpApp() {
             ) : null}
           </header>
 
-          <main className="flex-1 px-4 py-4 pb-[calc(var(--safe-bottom)+9rem)] md:px-6 md:py-6 md:pb-[calc(var(--safe-bottom)+9.5rem)] lg:px-8 xl:pb-8">
-            {isPublicView ? (
-              <div className="mx-auto grid max-w-6xl gap-4">
-                <div className="flex items-center justify-between gap-3 print:hidden">
-                  <Button variant="outline" size="sm" onClick={() => setPublicPreview(false)}>
-                    <ChevronLeft />
-                    Volver
-                  </Button>
-                  <span className="text-xs font-semibold text-muted-foreground">Vista previa (sin guardar)</span>
+          <PullToRefresh onRefresh={reload}>
+            <main className="flex-1 px-4 py-4 pb-[calc(var(--safe-bottom)+9rem)] md:px-6 md:py-6 md:pb-[calc(var(--safe-bottom)+9.5rem)] lg:px-8 xl:pb-8">
+              {isPublicView ? (
+                <div className="mx-auto grid max-w-6xl gap-4">
+                  <div className="flex items-center justify-between gap-3 print:hidden">
+                    <Button variant="outline" size="sm" onClick={() => setPublicPreview(false)}>
+                      <ChevronLeft />
+                      Volver
+                    </Button>
+                    <span className="text-xs font-semibold text-muted-foreground">Vista previa (sin guardar)</span>
+                  </div>
+                  <PublicAssessmentView athlete={selected} assessmentOverride={publicAssessment} />
                 </div>
-                <PublicAssessmentView athlete={selected} assessmentOverride={publicAssessment} />
-              </div>
-            ) : view === 'athletes' ? (
-              detailAthlete ? (
-                <AthleteDetailView
-                  athlete={detailAthlete}
+              ) : view === 'athletes' ? (
+                detailAthlete ? (
+                  <AthleteDetailView
+                    athlete={detailAthlete}
+                    isAdmin={isAdmin}
+                    onBack={() => setDetailId(null)}
+                    onViewFicha={(assessment) => viewFicha(detailAthlete, assessment)}
+                    onEditInfo={() => setEditOpen(true)}
+                    onNewFicha={() => startNewFicha(detailAthlete)}
+                    onEditFicha={(assessment) => editFicha(detailAthlete, assessment)}
+                  />
+                ) : (
+                  <AthletesTable
+                    athletes={filteredAthletes}
+                    categoryOptions={categoryOptions}
+                    query={query}
+                    category={category}
+                    onQuery={setQuery}
+                    onCategory={setCategory}
+                    onCreate={() => setIsCreateOpen(true)}
+                    onOpen={openDetail}
+                  />
+                )
+              ) : view === 'assessment' ? (
+                <AssessmentView
+                  key={(formAssessment?.id ?? 'new') + selected.id}
+                  athlete={selected}
+                  assessment={formAssessment ?? emptyAssessment()}
+                  assessmentId={formAssessment?.id}
                   isAdmin={isAdmin}
-                  onBack={() => setDetailId(null)}
-                  onViewFicha={(assessment) => viewFicha(detailAthlete, assessment)}
-                  onEditInfo={() => setEditOpen(true)}
-                  onNewFicha={() => startNewFicha(detailAthlete)}
-                  onEditFicha={(assessment) => editFicha(detailAthlete, assessment)}
+                  onBack={() => setView('athletes')}
+                  onSave={async (draft) => {
+                    await saveAssessmentDraft(selected.id, draft, formAssessment?.id);
+                    setView('athletes');
+                  }}
+                  onPhotoChange={(photoUrl) => updateAthletePhoto(selected.id, photoUrl)}
+                  onPreviewPublic={(nextAssessment) => {
+                    setPublicAssessment(nextAssessment);
+                    setPublicPreview(true);
+                  }}
                 />
-              ) : (
-                <AthletesTable
-                  athletes={filteredAthletes}
-                  categoryOptions={categoryOptions}
-                  query={query}
-                  category={category}
-                  onQuery={setQuery}
-                  onCategory={setCategory}
-                  onCreate={() => setIsCreateOpen(true)}
-                  onOpen={openDetail}
+              ) : view === 'dashboard' ? (
+                <DashboardView athletes={mockAthletes} />
+              ) : view === 'settings' ? (
+                <SettingsView
+                  settings={settings}
+                  onReload={reload}
+                  fichaTheme={fichaTheme}
+                  onFichaTheme={changeFichaTheme}
+                  sampleFichaId={mockAthletes.find((a) => a.assessments.some((s) => s.id))?.assessments.find((s) => s.id)?.id}
                 />
-              )
-            ) : view === 'assessment' ? (
-              <AssessmentView
-                key={(formAssessment?.id ?? 'new') + selected.id}
-                athlete={selected}
-                assessment={formAssessment ?? emptyAssessment()}
-                assessmentId={formAssessment?.id}
-                isAdmin={isAdmin}
-                onBack={() => setView('athletes')}
-                onSave={async (draft) => {
-                  await saveAssessmentDraft(selected.id, draft, formAssessment?.id);
-                  setView('athletes');
-                }}
-                onPhotoChange={(photoUrl) => updateAthletePhoto(selected.id, photoUrl)}
-                onPreviewPublic={(nextAssessment) => {
-                  setPublicAssessment(nextAssessment);
-                  setPublicPreview(true);
-                }}
-              />
-            ) : view === 'dashboard' ? (
-              <DashboardView athletes={mockAthletes} />
-            ) : view === 'settings' ? (
-              <SettingsView
-                settings={settings}
-                onReload={reload}
-                fichaTheme={fichaTheme}
-                onFichaTheme={changeFichaTheme}
-                sampleFichaId={mockAthletes.find((a) => a.assessments.some((s) => s.id))?.assessments.find((s) => s.id)?.id}
-              />
-            ) : null}
-          </main>
+              ) : null}
+            </main>
+          </PullToRefresh>
 
           {isAdmin ? (
           <nav className="fixed inset-x-4 bottom-[calc(var(--safe-bottom)+1rem)] z-40 grid grid-cols-3 gap-2 rounded-[999px] border border-white/10 bg-surface/90 p-2 shadow-float backdrop-blur xl:hidden print:hidden">
@@ -568,6 +587,83 @@ export default function MockMvpApp() {
           onCreate={(data) => updateAthleteInfo(detailAthlete.id, data)}
         />
       ) : null}
+    </div>
+  );
+}
+
+function PullToRefresh({ children, onRefresh }: { children: ReactNode; onRefresh: () => Promise<void> }) {
+  const startY = useRef<number | null>(null);
+  const pulling = useRef(false);
+  const [distance, setDistance] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const canRefresh = distance >= PULL_THRESHOLD;
+
+  async function refresh() {
+    setRefreshing(true);
+    setDistance(PULL_THRESHOLD);
+    try {
+      await onRefresh();
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setRefreshing(false);
+      setDistance(0);
+    }
+  }
+
+  return (
+    <div
+      className="relative flex flex-1 flex-col"
+      onTouchStart={(event) => {
+        if (refreshing || window.scrollY > 0) return;
+        startY.current = event.touches[0]?.clientY ?? null;
+        pulling.current = false;
+      }}
+      onTouchMove={(event) => {
+        if (refreshing || startY.current == null) return;
+        const delta = (event.touches[0]?.clientY ?? 0) - startY.current;
+        if (delta <= 0 || window.scrollY > 0) {
+          setDistance(0);
+          return;
+        }
+        pulling.current = true;
+        setDistance(Math.min(PULL_MAX, delta * 0.55));
+      }}
+      onTouchEnd={() => {
+        startY.current = null;
+        if (!pulling.current || refreshing) {
+          setDistance(0);
+          return;
+        }
+        pulling.current = false;
+        if (distance >= PULL_THRESHOLD) {
+          void refresh();
+        } else {
+          setDistance(0);
+        }
+      }}
+      onTouchCancel={() => {
+        startY.current = null;
+        pulling.current = false;
+        if (!refreshing) setDistance(0);
+      }}
+    >
+      <div
+        className="pointer-events-none fixed left-1/2 top-[calc(var(--safe-top)+0.75rem)] z-50 flex -translate-x-1/2 items-center gap-2 rounded-full border border-border bg-surface/95 px-4 py-2 text-xs font-bold text-foreground shadow-float backdrop-blur transition-all duration-200 print:hidden"
+        style={{
+          opacity: distance > 8 || refreshing ? 1 : 0,
+          transform: `translate(-50%, ${refreshing ? 20 : Math.round(distance * 0.45)}px)`,
+        }}
+      >
+        <span className={`size-3 rounded-full border-2 border-brand border-t-transparent ${refreshing ? 'animate-spin' : ''}`} />
+        {refreshing ? 'Actualizando' : canRefresh ? 'Soltar para refrescar' : 'Estirar para refrescar'}
+      </div>
+      <div
+        className="flex flex-1 flex-col transition-transform duration-200"
+        style={{ transform: distance > 0 && !refreshing ? `translateY(${Math.round(distance * 0.35)}px)` : undefined }}
+      >
+        {children}
+      </div>
     </div>
   );
 }
@@ -965,16 +1061,55 @@ function AssessmentView({
       sj: s(p.sjCm), cmj: s(p.cmjCm), abalakov: s(p.abalakovCm),
       saltoUniDer: s(p.saltoUnilateralDerCm), saltoUniIzq: s(p.saltoUnilateralIzqCm),
       fuerzaMax: s(p.fuerzaMaximaKg),
-      squat1rm: s(p.sentadilla1rmKg), squatDist: s(p.sentadillaDesplazamientoM), squatSeg: s(p.sentadillaSeg),
-      banca1rm: s(p.pressBanca1rmKg), bancaDist: s(p.pressBancaDesplazamientoM), bancaSeg: s(p.pressBancaSeg),
+      squatLoad: s(p.sentadillaCargaKg),
+      squat1rm: s(p.sentadilla1rmKg),
+      squatVm: s(p.sentadillaVelocidadMediaMs),
+      squatPower: s(p.sentadillaPotenciaW),
       pct1rm: s(p.pct1rmSentadilla),
-      speed10m: s(p.velocidad10mS), speed30m: s(p.velocidad30mS),
-      agilidad505: s(p.agilidad505S), vo2: s(p.vo2Ml),
+      bancaLoad: s(p.pressBancaCargaKg),
+      banca1rm: s(p.pressBanca1rmKg),
+      bancaVm: s(p.pressBancaVelocidadMediaMs),
+      bancaPower: s(p.pressBancaPotenciaW),
+      bancaPct1rm: s(p.pct1rmPressBanca),
+      speed10m: s(p.velocidad10mS), speed20m: s(p.velocidad20mS), speed30m: s(p.velocidad30mS),
+      agilityLabel: s(p.agilidadLabel), agilidad505: s(p.agilidad505S), vo2: s(p.vo2Ml),
       notes: assessment.profile?.notes || '', plan: assessment.raw?.plan ?? '',
     };
   });
+  const [selectedSprintDistances, setSelectedSprintDistances] = useState<SprintDistance[]>(() => {
+    const p = assessment.raw?.performance ?? {};
+    const selected: SprintDistance[] = [];
+    if (p.velocidad10mS != null) selected.push('10');
+    if (p.velocidad20mS != null) selected.push('20');
+    if (p.velocidad30mS != null) selected.push('30');
+    return selected.length > 0 ? selected : ['10'];
+  });
   const updateDraft = (key: keyof AssessmentDraft, value: string) =>
-    setDraft((current) => ({ ...current, [key]: value }));
+    setDraft((current) => {
+      const next = { ...current, [key]: value };
+      if (key === 'squatLoad' || key === 'squat1rm') {
+        const previousPct = calcPct1rm(current.squatLoad, current.squat1rm);
+        const nextPct = calcPct1rm(next.squatLoad, next.squat1rm);
+        if (!current.pct1rm || current.pct1rm === previousPct) next.pct1rm = nextPct;
+      }
+      if (key === 'bancaLoad' || key === 'banca1rm') {
+        const previousPct = calcPct1rm(current.bancaLoad, current.banca1rm);
+        const nextPct = calcPct1rm(next.bancaLoad, next.banca1rm);
+        if (!current.bancaPct1rm || current.bancaPct1rm === previousPct) next.bancaPct1rm = nextPct;
+      }
+      return next;
+    });
+  const toggleSprintDistance = (distance: (typeof sprintDistances)[number]) => {
+    setSelectedSprintDistances((current) => {
+      const active = current.includes(distance.value);
+      if (active && current.length === 1) return current;
+      if (active) {
+        updateDraft(distance.key, '');
+        return current.filter((item) => item !== distance.value);
+      }
+      return [...current, distance.value];
+    });
+  };
 
   // Helper compacto para los campos de la ficha completa.
   const F = (label: string, k: keyof AssessmentDraft, ph = '', mode: 'decimal' | 'numeric' | 'text' = 'decimal') => (
@@ -997,15 +1132,16 @@ function AssessmentView({
   const weightValue = toNumber(draft.weight);
   const heightValue = toNumber(draft.height);
   const imcValue = toNumber(draft.imc);
-  const avgVelocity = (metersKey: keyof AssessmentDraft, segKey: keyof AssessmentDraft) => {
-    const meters = toNumber(draft[metersKey]);
-    const sg = toNumber(draft[segKey]);
-    return meters != null && sg != null && sg > 0 ? (meters / sg).toFixed(2) : null;
-  };
   const speed10mValue = toNumber(draft.speed10m);
+  const selectedSprintConfig =
+    sprintDistances.find((distance) => selectedSprintDistances.includes(distance.value) && draft[distance.key].trim() !== '') ??
+    sprintDistances.find((distance) => selectedSprintDistances.includes(distance.value)) ??
+    sprintDistances[0];
+  const sprintDistanceM = Number(selectedSprintConfig.value);
+  const sprintValue = toNumber(draft[selectedSprintConfig.key]);
   const squatValue = toNumber(draft.squat1rm);
   const vo2Value = toNumber(draft.vo2);
-  const kmh = kmhFrom10m(speed10mValue);
+  const kmh = kmhFromSprint(sprintDistanceM, sprintValue);
   const age = chronologicalAge(athlete.birthDate, assessment.date);
   const bioAge = biologicalAge(athlete.sex, athlete.birthDate, assessment.date, heightValue);
   const fatStatus = classifyFat(athlete.sex, fatValue);
@@ -1020,7 +1156,7 @@ function AssessmentView({
   ];
   const liveRadar: RadarMetric[] = [
     { key: 'strength', label: 'Fuerza maxima', shortLabel: 'Fuerza', score: normalize(squatValue, 40, 140), team: 70, raw: squatValue == null ? 'Sin dato' : `${squatValue} kg`, source: 'Sentadilla 1RM' },
-    { key: 'speed', label: 'Velocidad punta', shortLabel: 'Velocidad', score: normalizeSpeed(speed10mValue), team: 68, raw: kmh == null ? 'Sin dato' : `${kmh.toFixed(1)} km/h`, source: 'Sprint 10 m' },
+    { key: 'speed', label: 'Velocidad punta', shortLabel: 'Velocidad', score: normalizeSpeed(sprintValue == null ? null : sprintValue * (10 / sprintDistanceM)), team: 68, raw: kmh == null ? 'Sin dato' : `${kmh.toFixed(1)} km/h`, source: `Sprint ${sprintDistanceM} m` },
     { key: 'endurance', label: 'Resistencia', shortLabel: 'Resistencia', score: normalize(vo2Value, 30, 65), team: 66, raw: vo2Value == null ? 'Sin dato' : `${vo2Value} ml/kg`, source: 'VO2max' },
     { key: 'jump', label: 'Altura de salto', shortLabel: 'Salto', score: normalize(cmjValue, 15, 55), team: 61, raw: cmjValue == null ? 'Sin dato' : `${cmjValue} cm`, source: 'CMJ' },
   ];
@@ -1049,6 +1185,31 @@ function AssessmentView({
         imc: imcValue ?? undefined,
         pctGrasa: fatValue ?? undefined,
         pctMasa: toNumber(draft.masa) ?? undefined,
+      },
+      performance: {
+        ...(assessment.raw?.performance ?? {}),
+        sjCm: toNumber(draft.sj) ?? undefined,
+        cmjCm: cmjValue ?? undefined,
+        abalakovCm: toNumber(draft.abalakov) ?? undefined,
+        saltoUnilateralDerCm: toNumber(draft.saltoUniDer) ?? undefined,
+        saltoUnilateralIzqCm: toNumber(draft.saltoUniIzq) ?? undefined,
+        fuerzaMaximaKg: toNumber(draft.fuerzaMax) ?? undefined,
+        sentadillaCargaKg: toNumber(draft.squatLoad) ?? undefined,
+        sentadillaVelocidadMediaMs: toNumber(draft.squatVm) ?? undefined,
+        sentadillaPotenciaW: toNumber(draft.squatPower) ?? undefined,
+        sentadilla1rmKg: squatValue ?? undefined,
+        pct1rmSentadilla: toNumber(draft.pct1rm) ?? undefined,
+        pressBancaCargaKg: toNumber(draft.bancaLoad) ?? undefined,
+        pressBancaVelocidadMediaMs: toNumber(draft.bancaVm) ?? undefined,
+        pressBancaPotenciaW: toNumber(draft.bancaPower) ?? undefined,
+        pressBanca1rmKg: toNumber(draft.banca1rm) ?? undefined,
+        pct1rmPressBanca: toNumber(draft.bancaPct1rm) ?? undefined,
+        velocidad10mS: speed10mValue ?? undefined,
+        velocidad20mS: toNumber(draft.speed20m) ?? undefined,
+        velocidad30mS: toNumber(draft.speed30m) ?? undefined,
+        agilidadLabel: draft.agilityLabel.trim() || undefined,
+        agilidad505S: toNumber(draft.agilidad505) ?? undefined,
+        vo2Ml: vo2Value ?? undefined,
       },
       plan: draft.plan.trim(),
     },
@@ -1165,9 +1326,6 @@ function AssessmentView({
           <FormField label="IMC">
             <input disabled={!isAdmin} inputMode="decimal" value={draft.imc} onChange={(event) => updateDraft('imc', event.target.value)} placeholder="Ej. 21.9" className="field-control" />
           </FormField>
-          <FormField label="Velocidad 10 m (s)">
-            <input disabled={!isAdmin} inputMode="decimal" value={draft.speed10m} onChange={(event) => updateDraft('speed10m', event.target.value)} placeholder="1.90" className="field-control" />
-          </FormField>
           <FormField label="Resistencia VO2max (ml/kg)">
             <input disabled={!isAdmin} inputMode="decimal" value={draft.vo2} onChange={(event) => updateDraft('vo2', event.target.value)} placeholder="52" className="field-control" />
           </FormField>
@@ -1209,7 +1367,7 @@ function AssessmentView({
           {F('Observación flexibilidad', 'flexObs', 'Opcional', 'text')}
         </div>
 
-        <h3 className="mt-8 mb-3 text-sm font-bold uppercase tracking-wide text-brand">Rendimiento · saltos</h3>
+        <h3 className="mt-8 mb-3 text-sm font-bold uppercase tracking-wide text-brand">Rendimiento · Fuerza y potencia</h3>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {F('Squat Jump (cm)', 'sj')}
           {F('Abalakov (cm)', 'abalakov')}
@@ -1217,43 +1375,84 @@ function AssessmentView({
           {F('Salto unilateral IZQ (cm)', 'saltoUniIzq')}
         </div>
 
-        <h3 className="mt-8 mb-3 text-sm font-bold uppercase tracking-wide text-brand">Rendimiento · fuerza y velocidad media</h3>
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {F('Fuerza máxima (kg)', 'fuerzaMax')}
-          {F('% 1RM sentadilla', 'pct1rm')}
-        </div>
-        <p className="mt-3 text-xs text-muted-foreground">
-          Velocidad media = desplazamiento / tiempo (con encoder). Ej. 0.65 m en 1.2 s {'->'} 0.54 m/s.
+        <h3 className="mt-8 mb-3 text-sm font-bold uppercase tracking-wide text-brand">Perfil · fuerza y velocidad </h3>
+        <p className="mt-3 rounded-md border border-border bg-background/35 px-4 py-3 text-sm font-semibold leading-6 text-muted-foreground">
+          Datos del encoder lineal: Carga, Vm, Potencia, 1RM y %1RM. El %1RM se sugiere desde Carga / 1RM y queda editable.
         </p>
-        <div className="mt-3 grid gap-4 md:grid-cols-2">
-          <div className="rounded-md border border-border bg-background/35 p-4">
-            <p className="mb-3 text-sm font-semibold text-foreground">Sentadilla</p>
-            <div className="grid gap-3 sm:grid-cols-3">
-              {F('Carga (kg)', 'squat1rm', 'Ej. 20')}
-              {F('Desplazamiento (m)', 'squatDist', 'Ej. 0.65')}
-              {F('Tiempo (s)', 'squatSeg', 'Ej. 3.2')}
+        <div className="mt-3 grid gap-4 xl:grid-cols-2">
+          <div className="rounded-lg border border-border bg-background/45 p-4 md:p-5">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <p className="text-lg font-semibold text-foreground">Sentadilla</p>
+              <span className="rounded-sm border border-brand/30 bg-brand/10 px-3 py-1 text-xs font-bold text-brand">Encoder</span>
             </div>
-            <p className="mt-2 text-sm font-semibold text-brand">
-              Velocidad media: {avgVelocity('squatDist', 'squatSeg') ?? '—'} {avgVelocity('squatDist', 'squatSeg') ? 'm/s' : ''}
-            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {F('Carga kg', 'squatLoad', 'Ej. 40')}
+              {F('Vm m/s', 'squatVm', 'Ej. 0.87')}
+              {F('Potencia W', 'squatPower', 'Ej. 341', 'numeric')}
+              {F('1RM kg', 'squat1rm', 'Ej. 79.05')}
+              {F('%1RM', 'pct1rm', 'Ej. 50.6')}
+            </div>
           </div>
-          <div className="rounded-md border border-border bg-background/35 p-4">
-            <p className="mb-3 text-sm font-semibold text-foreground">Press de banca</p>
-            <div className="grid gap-3 sm:grid-cols-3">
-              {F('Carga (kg)', 'banca1rm', 'Ej. 30')}
-              {F('Desplazamiento (m)', 'bancaDist', 'Ej. 0.45')}
-              {F('Tiempo (s)', 'bancaSeg', 'Ej. 2.8')}
+          <div className="rounded-lg border border-border bg-background/45 p-4 md:p-5">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <p className="text-lg font-semibold text-foreground">Press de banca</p>
+              <span className="rounded-sm border border-brand/30 bg-brand/10 px-3 py-1 text-xs font-bold text-brand">Encoder</span>
             </div>
-            <p className="mt-2 text-sm font-semibold text-brand">
-              Velocidad media: {avgVelocity('bancaDist', 'bancaSeg') ?? '—'} {avgVelocity('bancaDist', 'bancaSeg') ? 'm/s' : ''}
-            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {F('Carga kg', 'bancaLoad', 'Ej. 30')}
+              {F('Vm m/s', 'bancaVm', 'Ej. 0.85')}
+              {F('Potencia W', 'bancaPower', 'Ej. 333', 'numeric')}
+              {F('1RM kg', 'banca1rm', 'Ej. 75.47')}
+              {F('%1RM', 'bancaPct1rm', 'Ej. 53')}
+            </div>
           </div>
         </div>
 
         <h3 className="mt-8 mb-3 text-sm font-bold uppercase tracking-wide text-brand">Rendimiento · velocidad y agilidad</h3>
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {F('30 metros (s)', 'speed30m', 'Ej. 4.5')}
-          {F('Test 5-10-5 (s)', 'agilidad505', 'Ej. 5.2')}
+        <div className="rounded-lg border border-border bg-background/35 p-4">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-muted-foreground">Distancias medidas</p>
+            <div className="flex flex-wrap gap-2">
+              {sprintDistances.map((distance) => {
+                const active = selectedSprintDistances.includes(distance.value);
+                return (
+                  <button
+                    key={distance.value}
+                    type="button"
+                    disabled={!isAdmin}
+                    onClick={() => toggleSprintDistance(distance)}
+                    className={`h-10 rounded-md border px-4 text-sm font-bold transition ${
+                      active
+                        ? 'border-brand bg-brand text-brand-foreground'
+                        : 'border-border bg-surface text-muted-foreground'
+                    }`}
+                  >
+                    {distance.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {sprintDistances
+              .filter((distance) => selectedSprintDistances.includes(distance.value))
+              .map((distance) => (
+                <FormField key={distance.value} label={`${distance.label} (s)`}>
+                  <input
+                    disabled={!isAdmin}
+                    inputMode="decimal"
+                    value={draft[distance.key]}
+                    onChange={(event) => updateDraft(distance.key, event.target.value)}
+                    placeholder={distance.placeholder}
+                    className="field-control"
+                  />
+                </FormField>
+              ))}
+          </div>
+        </div>
+        <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {F('Test de agilidad', 'agilityLabel', 'Ej. T-test / 10M-5M-5M', 'text')}
+          {F('Valor agilidad (s)', 'agilidad505', 'Ej. 5.2')}
         </div>
 
         <h3 className="mt-8 mb-3 text-sm font-bold uppercase tracking-wide text-brand">Observaciones y plan</h3>
@@ -1267,7 +1466,7 @@ function AssessmentView({
           <DashboardMetric label="% Grasa corporal" value={fatValue ?? '—'} suffix="%" footer={fatStatus.label} delta="en vivo" icon={Gauge} series={[...metricSeries.fat]} />
           <DashboardMetric label="FC en reposo" value={restingHrValue ?? '—'} suffix="ppm" footer={hrStatus.label} delta="en vivo" icon={HeartPulse} series={[...metricSeries.heart]} />
           <DashboardMetric label="CMJ (salto)" value={cmjValue ?? '—'} suffix="cm" footer={cmjStatus.label} delta="en vivo" icon={Activity} series={[...metricSeries.jump]} />
-          <DashboardMetric label="Sprint 10 m" value={speed10mValue ?? '—'} suffix="s" footer={kmh == null ? 'Sin dato' : `${kmh.toFixed(1)} km/h`} delta="en vivo" icon={Flame} series={[...metricSeries.sprint]} invertSeries />
+          <DashboardMetric label={`Sprint ${sprintDistanceM} m`} value={sprintValue ?? '—'} suffix="s" footer={kmh == null ? 'Sin dato' : `${kmh.toFixed(1)} km/h`} delta="en vivo" icon={Flame} series={[...metricSeries.sprint]} invertSeries />
         </div>
 
         <div className="mt-4 grid gap-4 md:grid-cols-2">

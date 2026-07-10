@@ -3,7 +3,7 @@
 import { Fragment, useState } from 'react';
 import Image from 'next/image';
 import type { Anthropometry, Cardio, Flexibility, Performance, Rom } from '@/lib/ficha';
-import { averageVelocity, biologicalAge } from '@/lib/scales';
+import { biologicalAge } from '@/lib/scales';
 
 /**
  * Documento de la FICHA DE VALORACIÓN IN MOVE — branding verde, estructurado
@@ -159,9 +159,6 @@ export function FichaDocument({ data }: { data: FichaData }) {
 
   const imc = a.imc ?? null;
   const bioAge = biologicalAge(data.sex, data.birthDate, data.assessedOn, a.estaturaCm);
-  const squatVelocity = averageVelocity(p.sentadillaDesplazamientoM, p.sentadillaSeg);
-  const benchVelocity = averageVelocity(p.pressBancaDesplazamientoM, p.pressBancaSeg);
-
   return (
     <div className="mx-auto w-full max-w-[900px] rounded-2xl border-2 border-green-600 bg-[var(--fc-card)] p-4 text-[var(--fc-ink)] md:p-6">
       {/* Header */}
@@ -250,18 +247,20 @@ export function FichaDocument({ data }: { data: FichaData }) {
         <Metric label="Abalakov (cm)" value={val(p.abalakovCm)} />
         <Metric label="Salto unilat. I/D (cm)" value={`${val(p.saltoUnilateralIzqCm)} / ${val(p.saltoUnilateralDerCm)}`} />
         <Metric label="Fuerza máxima (kg)" value={val(p.fuerzaMaximaKg)} />
-        <Metric label="Sentadilla (carga · despl. · tiempo)" value={`${val(p.sentadilla1rmKg, ' kg')} · ${val(p.sentadillaDesplazamientoM, ' m')} · ${val(p.sentadillaSeg, ' s')}`} />
-        <Metric label="Vel. media sentadilla" value={squatVelocity == null ? '—' : `${squatVelocity.toFixed(2)} m/s`} />
-        <Metric label="Press banca (carga · despl. · tiempo)" value={`${val(p.pressBanca1rmKg, ' kg')} · ${val(p.pressBancaDesplazamientoM, ' m')} · ${val(p.pressBancaSeg, ' s')}`} />
-        <Metric label="Vel. media banca" value={benchVelocity == null ? '—' : `${benchVelocity.toFixed(2)} m/s`} />
+        <Metric label="Sentadilla (carga · Vm · W)" value={`${val(p.sentadillaCargaKg, ' kg')} · ${val(p.sentadillaVelocidadMediaMs, ' m/s')} · ${val(p.sentadillaPotenciaW, ' W')}`} />
+        <Metric label="1RM sentadilla" value={val(p.sentadilla1rmKg, ' kg')} />
+        <Metric label="Press banca (carga · Vm · W)" value={`${val(p.pressBancaCargaKg, ' kg')} · ${val(p.pressBancaVelocidadMediaMs, ' m/s')} · ${val(p.pressBancaPotenciaW, ' W')}`} />
+        <Metric label="1RM banca" value={val(p.pressBanca1rmKg, ' kg')} />
         <Metric label="% 1RM sentadilla" value={val(p.pct1rmSentadilla, ' %')} />
+        <Metric label="% 1RM banca" value={val(p.pct1rmPressBanca, ' %')} />
       </div>
 
       <SectionTitle>Velocidad y agilidad</SectionTitle>
-      <div className="grid gap-2 sm:grid-cols-3">
+      <div className="grid gap-2 sm:grid-cols-4">
         <Metric label="Velocidad 10 m (s)" value={val(p.velocidad10mS)} />
-        <Metric label="30 metros (s)" value={val(p.velocidad30mS)} />
-        <Metric label="Test 5-10-5 (s)" value={val(p.agilidad505S)} />
+        <Metric label="Velocidad 20 m (s)" value={val(p.velocidad20mS)} />
+        <Metric label="Velocidad 30 m (s)" value={val(p.velocidad30mS)} />
+        <Metric label={p.agilidadLabel ? `${p.agilidadLabel} (s)` : 'Test de agilidad (s)'} value={val(p.agilidad505S)} />
       </div>
 
       <SectionTitle>Observaciones generales</SectionTitle>

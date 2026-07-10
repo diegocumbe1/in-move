@@ -166,12 +166,16 @@ export type RadarAxis = { label: string; score: number; raw: string };
 export function buildRadar(m: ComparisonMeasures): RadarAxis[] {
   const p = m.performance ?? {};
   const squat = p.sentadilla1rmKg ?? p.fuerzaMaximaKg;
-  const speed = p.velocidad10mS;
+  const speed10m = p.velocidad10mS;
+  const speed20m = p.velocidad20mS;
+  const speed30m = p.velocidad30mS;
+  const sprintDistance = speed10m != null ? 10 : speed20m != null ? 20 : 30;
+  const speed = speed10m ?? speed20m ?? speed30m;
   const vo2 = p.vo2Ml;
   const cmj = p.cmjCm;
   return [
     { label: 'Fuerza', score: normalize(squat, 40, 140), raw: squat == null ? '—' : `${squat} kg` },
-    { label: 'Velocidad', score: normalizeSpeed(speed), raw: speed == null ? '—' : `${speed} s` },
+    { label: 'Velocidad', score: normalizeSpeed(speed == null ? null : speed * (10 / sprintDistance)), raw: speed == null ? '—' : `${speed} s (${sprintDistance} m)` },
     { label: 'Resistencia', score: normalize(vo2, 30, 65), raw: vo2 == null ? '—' : `${vo2} ml/kg` },
     { label: 'Salto', score: normalize(cmj, 15, 55), raw: cmj == null ? '—' : `${cmj} cm` },
   ];
