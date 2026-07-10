@@ -58,6 +58,7 @@ import type { AssessmentDraftInput } from '@/lib/form-types';
 import type { CatalogKind, FichaTheme } from '@/lib/ficha';
 
 const viewItems: Array<{ id: ViewId; label: string; icon: typeof UsersRound }> = [
+  { id: 'dashboard', label: 'Panel', icon: Home },
   { id: 'athletes', label: 'Deportistas', icon: UsersRound },
   { id: 'assessment', label: 'Valoracion', icon: ClipboardList },
   { id: 'settings', label: 'Settings', icon: Settings },
@@ -596,11 +597,6 @@ function NavRail({ current, onChange }: { current: ViewId; onChange: (view: View
 
   return (
     <nav className="flex flex-col gap-2">
-      <div className="flex h-12 items-center gap-3 rounded-md px-3 text-sm font-semibold text-muted-foreground/45">
-        <Home className="size-5" />
-        Panel
-        <span className="ml-auto rounded-sm bg-white/5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">Pronto</span>
-      </div>
       {viewItems.map((item) => {
         const Icon = item.icon;
         const active = current === item.id;
@@ -770,7 +766,7 @@ function AthleteDetailView({
   const [zoom, setZoom] = useState(false);
   const w = latest?.profile?.weight;
   const h = latest?.profile?.height;
-  const imc = w != null && h != null && h > 0 ? w / (h / 100) ** 2 : null;
+  const imc = latest?.raw?.anthropometry?.imc ?? null;
 
   return (
     <div className="grid gap-5">
@@ -956,7 +952,7 @@ function AssessmentView({
     const f = assessment.raw?.flexibility ?? {};
     const p = assessment.raw?.performance ?? {};
     return {
-      weight: s(a.pesoKg), height: s(a.estaturaCm), fat: s(a.pctGrasa), masa: s(a.pctMasa),
+      weight: s(a.pesoKg), height: s(a.estaturaCm), imc: s(a.imc), fat: s(a.pctGrasa), masa: s(a.pctMasa),
       restingHr: s(c.fcReposo), fcInicial: s(c.fcInicial), fcFinal: s(c.fcFinal), fcMax: s(c.fcMax),
       colFlex: s(r.columnaFlexion), colExt: s(r.columnaExtension),
       hombRotIntIzq: s(r.hombroRotIntIzq), hombRotIntDer: s(r.hombroRotIntDer),
@@ -1000,10 +996,7 @@ function AssessmentView({
   const cmjValue = toNumber(draft.cmj);
   const weightValue = toNumber(draft.weight);
   const heightValue = toNumber(draft.height);
-  const bmiValue =
-    weightValue != null && heightValue != null && heightValue > 0
-      ? weightValue / (heightValue / 100) ** 2
-      : null;
+  const imcValue = toNumber(draft.imc);
   const avgVelocity = (metersKey: keyof AssessmentDraft, segKey: keyof AssessmentDraft) => {
     const meters = toNumber(draft[metersKey]);
     const sg = toNumber(draft[segKey]);
@@ -1039,12 +1032,25 @@ function AssessmentView({
     profile: {
       weight: weightValue,
       height: heightValue,
+      bmi: imcValue,
       chronologicalAge: age,
       biologicalAge: bioAge,
       speed10m: speed10mValue,
       squat1rm: squatValue,
       vo2: vo2Value,
       notes: draft.notes.trim(),
+    },
+    raw: {
+      ...(assessment.raw ?? {}),
+      anthropometry: {
+        ...(assessment.raw?.anthropometry ?? {}),
+        pesoKg: weightValue ?? undefined,
+        estaturaCm: heightValue ?? undefined,
+        imc: imcValue ?? undefined,
+        pctGrasa: fatValue ?? undefined,
+        pctMasa: toNumber(draft.masa) ?? undefined,
+      },
+      plan: draft.plan.trim(),
     },
   };
 
@@ -1134,13 +1140,6 @@ function AssessmentView({
           </div>
         </div>
 
-        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <DashboardMetric label="% Grasa corporal" value={fatValue ?? '—'} suffix="%" footer={fatStatus.label} delta="en vivo" icon={Gauge} series={[...metricSeries.fat]} />
-          <DashboardMetric label="FC en reposo" value={restingHrValue ?? '—'} suffix="ppm" footer={hrStatus.label} delta="en vivo" icon={HeartPulse} series={[...metricSeries.heart]} />
-          <DashboardMetric label="CMJ (salto)" value={cmjValue ?? '—'} suffix="cm" footer={cmjStatus.label} delta="en vivo" icon={Activity} series={[...metricSeries.jump]} />
-          <DashboardMetric label="Sprint 10 m" value={speed10mValue ?? '—'} suffix="s" footer={kmh == null ? 'Sin dato' : `${kmh.toFixed(1)} km/h`} delta="en vivo" icon={Flame} series={[...metricSeries.sprint]} invertSeries />
-        </div>
-
         <div className="mt-6 grid gap-4 md:grid-cols-2">
           <FormField label="% Grasa corporal">
             <input disabled={!isAdmin} inputMode="decimal" value={draft.fat} onChange={(event) => updateDraft('fat', event.target.value)} placeholder="Ej. 14" className="field-control" />
@@ -1157,17 +1156,14 @@ function AssessmentView({
         </div>
 
         <div className="mt-6 grid gap-4 md:grid-cols-2">
-          {displayMetrics.map((metric) => (
-            <MetricInputCard key={metric.label} metric={metric} />
-          ))}
-        </div>
-
-        <div className="mt-6 grid gap-4 md:grid-cols-2">
           <FormField label="Peso (kg)">
             <input disabled={!isAdmin} inputMode="decimal" value={draft.weight} onChange={(event) => updateDraft('weight', event.target.value)} placeholder="57.4" className="field-control" />
           </FormField>
           <FormField label="Estatura (cm)">
             <input disabled={!isAdmin} inputMode="decimal" value={draft.height} onChange={(event) => updateDraft('height', event.target.value)} placeholder="162" className="field-control" />
+          </FormField>
+          <FormField label="IMC">
+            <input disabled={!isAdmin} inputMode="decimal" value={draft.imc} onChange={(event) => updateDraft('imc', event.target.value)} placeholder="Ej. 21.9" className="field-control" />
           </FormField>
           <FormField label="Velocidad 10 m (s)">
             <input disabled={!isAdmin} inputMode="decimal" value={draft.speed10m} onChange={(event) => updateDraft('speed10m', event.target.value)} placeholder="1.90" className="field-control" />
@@ -1180,9 +1176,6 @@ function AssessmentView({
         <h3 className="mt-8 mb-3 text-sm font-bold uppercase tracking-wide text-brand">Antropometría</h3>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {F('% Masa corporal (magra)', 'masa', 'Ej. 34')}
-          <FormField label="IMC (calculado)">
-            <input readOnly value={bmiValue == null ? '—' : bmiValue.toFixed(1)} className="field-control" />
-          </FormField>
         </div>
 
         <h3 className="mt-8 mb-3 text-sm font-bold uppercase tracking-wide text-brand">Control cardiovascular</h3>
@@ -1267,6 +1260,20 @@ function AssessmentView({
         <div className="grid gap-4 md:grid-cols-2">
           {F('Observaciones generales', 'notes', 'Notas de la valoración', 'text')}
           {F('Plan / recomendaciones', 'plan', 'Recomendaciones para el deportista', 'text')}
+        </div>
+
+        <h3 className="mt-8 mb-3 text-sm font-bold uppercase tracking-wide text-brand">Resultados en vivo</h3>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <DashboardMetric label="% Grasa corporal" value={fatValue ?? '—'} suffix="%" footer={fatStatus.label} delta="en vivo" icon={Gauge} series={[...metricSeries.fat]} />
+          <DashboardMetric label="FC en reposo" value={restingHrValue ?? '—'} suffix="ppm" footer={hrStatus.label} delta="en vivo" icon={HeartPulse} series={[...metricSeries.heart]} />
+          <DashboardMetric label="CMJ (salto)" value={cmjValue ?? '—'} suffix="cm" footer={cmjStatus.label} delta="en vivo" icon={Activity} series={[...metricSeries.jump]} />
+          <DashboardMetric label="Sprint 10 m" value={speed10mValue ?? '—'} suffix="s" footer={kmh == null ? 'Sin dato' : `${kmh.toFixed(1)} km/h`} delta="en vivo" icon={Flame} series={[...metricSeries.sprint]} invertSeries />
+        </div>
+
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          {displayMetrics.map((metric) => (
+            <MetricInputCard key={metric.label} metric={metric} />
+          ))}
         </div>
 
         <div className="mt-6 rounded-md border border-border bg-background/45 p-4">

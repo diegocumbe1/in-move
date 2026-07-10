@@ -21,6 +21,7 @@ export type AssessmentDraftInput = {
   // Antropometría
   weight: string; // peso kg
   height: string; // estatura cm
+  imc: string; // indice de masa corporal
   fat: string; // % grasa
   masa: string; // % masa corporal
   // Cardiovascular
@@ -74,7 +75,7 @@ export type AssessmentDraftInput = {
 
 /** Draft vacío con todos los campos en string vacío. */
 export const emptyDraft: AssessmentDraftInput = {
-  weight: '', height: '', fat: '', masa: '',
+  weight: '', height: '', imc: '', fat: '', masa: '',
   restingHr: '', fcInicial: '', fcFinal: '', fcMax: '',
   colFlex: '', colExt: '', hombRotIntIzq: '', hombRotIntDer: '', hombRotExtIzq: '', hombRotExtDer: '',
   hombFlexIzq: '', hombFlexDer: '', caderaIzq: '', caderaDer: '', rodillaIzq: '', rodillaDer: '',

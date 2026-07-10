@@ -1,6 +1,6 @@
 import type { Level } from '@/styles/tokens';
 import type { Anthropometry, Cardio, Flexibility, Performance } from '@/lib/ficha';
-import { bmi, normalize, normalizeSpeed } from '@/lib/scales';
+import { normalize, normalizeSpeed } from '@/lib/scales';
 
 /**
  * Escalas de comparación (semáforo) por indicador — FICHA_CAMPOS.md.
@@ -117,8 +117,7 @@ function sitReachComparison(sex: Sex, v: number | null | undefined): IndicatorCo
   };
 }
 
-function bmiComparison(weightKg: number | null | undefined, heightCm: number | null | undefined): IndicatorComparison {
-  const v = bmi(weightKg, heightCm);
+function bmiComparison(v: number | null | undefined): IndicatorComparison {
   const defs: Omit<Band, 'active'>[] = [
     { label: 'Bajo peso', range: '< 18.5', level: 'warning' },
     { label: 'Normal', range: '18.5 – 24.9', level: 'good' },
@@ -180,7 +179,7 @@ export function buildRadar(m: ComparisonMeasures): RadarAxis[] {
 
 export function buildComparison(sex: Sex, m: ComparisonMeasures): IndicatorComparison[] {
   return [
-    bmiComparison(m.anthropometry?.pesoKg, m.anthropometry?.estaturaCm),
+    bmiComparison(m.anthropometry?.imc),
     fatComparison(sex, m.anthropometry?.pctGrasa),
     masaComparison(sex, m.anthropometry?.pctMasa),
     hrComparison(m.cardio?.fcReposo),

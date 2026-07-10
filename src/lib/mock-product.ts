@@ -33,6 +33,7 @@ export type Assessment = {
   profile?: {
     weight?: number | null;
     height?: number | null;
+    bmi?: number | null;
     chronologicalAge?: number | null;
     biologicalAge?: number | null;
     speed10m?: number | null;

@@ -165,6 +165,7 @@ export async function saveAssessment(
     anthropometry: {
       pesoKg: num(draft.weight),
       estaturaCm: num(draft.height),
+      imc: num(draft.imc),
       pctGrasa: num(draft.fat),
       pctMasa: num(draft.masa),
     },

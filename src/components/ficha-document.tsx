@@ -3,7 +3,7 @@
 import { Fragment, useState } from 'react';
 import Image from 'next/image';
 import type { Anthropometry, Cardio, Flexibility, Performance, Rom } from '@/lib/ficha';
-import { averageVelocity, bmi, biologicalAge } from '@/lib/scales';
+import { averageVelocity, biologicalAge } from '@/lib/scales';
 
 /**
  * Documento de la FICHA DE VALORACIÓN IN MOVE — branding verde, estructurado
@@ -157,7 +157,7 @@ export function FichaDocument({ data }: { data: FichaData }) {
   const f = data.flexibility ?? {};
   const p = data.performance ?? {};
 
-  const imc = bmi(a.pesoKg, a.estaturaCm);
+  const imc = a.imc ?? null;
   const bioAge = biologicalAge(data.sex, data.birthDate, data.assessedOn, a.estaturaCm);
   const squatVelocity = averageVelocity(p.sentadillaDesplazamientoM, p.sentadillaSeg);
   const benchVelocity = averageVelocity(p.pressBancaDesplazamientoM, p.pressBancaSeg);
