@@ -158,7 +158,7 @@ export function FichaDocument({ data }: { data: FichaData }) {
   const p = data.performance ?? {};
 
   const imc = a.imc ?? null;
-  const bioAge = biologicalAge(data.sex, data.birthDate, data.assessedOn, a.estaturaCm);
+  const bioAge = biologicalAge(data.sex, data.birthDate, data.assessedOn, a.estaturaCm, a.estaturaSentadoCm, a.pesoKg);
   return (
     <div className="mx-auto w-full max-w-[900px] rounded-2xl border-2 border-green-600 bg-[var(--fc-card)] p-4 text-[var(--fc-ink)] md:p-6">
       {/* Header */}
@@ -195,6 +195,7 @@ export function FichaDocument({ data }: { data: FichaData }) {
       <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-5">
         <Metric label="Peso (kg)" value={val(a.pesoKg)} />
         <Metric label="Estatura (cm)" value={val(a.estaturaCm)} />
+        <Metric label="Estatura sentado (cm)" value={val(a.estaturaSentadoCm)} />
         <Metric label="IMC" value={imc == null ? '—' : imc.toFixed(1)} />
         <Metric label="% Grasa" value={val(a.pctGrasa, ' %')} />
         <Metric label="% Masa corporal" value={val(a.pctMasa, ' %')} />

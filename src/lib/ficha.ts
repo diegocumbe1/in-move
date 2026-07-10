@@ -14,6 +14,7 @@ import { z } from 'zod';
 export const anthropometrySchema = z.object({
   pesoKg: z.number().optional(),
   estaturaCm: z.number().optional(),
+  estaturaSentadoCm: z.number().optional(),
   imc: z.number().optional(),
   pctGrasa: z.number().optional(),
   pctMasa: z.number().optional(),

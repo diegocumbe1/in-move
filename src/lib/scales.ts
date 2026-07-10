@@ -36,13 +36,37 @@ export const biologicalAge = (
   birthDate: string,
   assessmentDate: string,
   heightCm: number | null | undefined,
+  sittingHeightCm: number | null | undefined,
+  weightKg: number | null | undefined,
 ) => {
   const ageDecimal = yearsBetween(birthDate, assessmentDate);
-  if (ageDecimal == null || heightCm == null || heightCm <= 0) return null;
-  const ageHeight = ageDecimal * heightCm;
-  const offset = sex === 'M' ? -7.999994 + 0.0036124 * ageHeight : -7.709133 + 0.0042232 * ageHeight;
-  const peakHeightVelocity = sex === 'M' ? 13.8 : 12.0;
-  return peakHeightVelocity + offset;
+  if (
+    ageDecimal == null ||
+    heightCm == null ||
+    sittingHeightCm == null ||
+    weightKg == null ||
+    heightCm <= 0 ||
+    sittingHeightCm <= 0 ||
+    weightKg <= 0 ||
+    sittingHeightCm >= heightCm
+  ) return null;
+
+  const legLengthCm = heightCm - sittingHeightCm;
+  const weightHeightRatio = (weightKg / heightCm) * 100;
+  const maturityOffset = sex === 'M'
+    ? -9.236 +
+      0.0002708 * (legLengthCm * sittingHeightCm) -
+      0.001663 * (ageDecimal * legLengthCm) +
+      0.007216 * (ageDecimal * sittingHeightCm) +
+      0.02292 * weightHeightRatio
+    : -9.376 +
+      0.0001882 * (legLengthCm * sittingHeightCm) +
+      0.0022 * (ageDecimal * legLengthCm) +
+      0.005841 * (ageDecimal * sittingHeightCm) -
+      0.002658 * (ageDecimal * weightKg) +
+      0.07693 * weightHeightRatio;
+
+  return ageDecimal - maturityOffset;
 };
 
 const noData = { level: 'warning' as Level, label: 'Sin dato', range: 'Pendiente' };
@@ -129,6 +153,7 @@ export function buildAssessment(
   const fat = m.anthropometry?.pctGrasa ?? null;
   const weight = m.anthropometry?.pesoKg ?? null;
   const height = m.anthropometry?.estaturaCm ?? null;
+  const sittingHeight = m.anthropometry?.estaturaSentadoCm ?? null;
   const imc = m.anthropometry?.imc ?? null;
   const restingHr = m.cardio?.fcReposo ?? null;
   const sitReach = m.flexibility?.resultadoCm ?? null;
@@ -172,7 +197,7 @@ export function buildAssessment(
       height,
       bmi: imc,
       chronologicalAge: chronologicalAge(birthDate, assessedOn),
-      biologicalAge: biologicalAge(sex, birthDate, assessedOn, height),
+      biologicalAge: biologicalAge(sex, birthDate, assessedOn, height, sittingHeight, weight),
       speed10m,
       squat1rm: squat,
       vo2,

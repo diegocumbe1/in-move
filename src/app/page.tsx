@@ -134,15 +134,42 @@ const chronologicalAge = (birthDate: string, assessmentDate: string) => {
   const years = yearsBetween(birthDate, assessmentDate);
   return years == null ? null : Math.floor(years);
 };
-const biologicalAge = (sex: Athlete['sex'], birthDate: string, assessmentDate: string, heightCm: number | null) => {
+const biologicalAge = (
+  sex: Athlete['sex'],
+  birthDate: string,
+  assessmentDate: string,
+  heightCm: number | null,
+  sittingHeightCm: number | null,
+  weightKg: number | null,
+) => {
   const ageDecimal = yearsBetween(birthDate, assessmentDate);
-  if (ageDecimal == null || heightCm == null || heightCm <= 0) return null;
-  const ageHeight = ageDecimal * heightCm;
-  const offset = sex === 'M'
-    ? -7.999994 + 0.0036124 * ageHeight
-    : -7.709133 + 0.0042232 * ageHeight;
-  const peakHeightVelocity = sex === 'M' ? 13.8 : 12.0;
-  return peakHeightVelocity + offset;
+  if (
+    ageDecimal == null ||
+    heightCm == null ||
+    sittingHeightCm == null ||
+    weightKg == null ||
+    heightCm <= 0 ||
+    sittingHeightCm <= 0 ||
+    weightKg <= 0 ||
+    sittingHeightCm >= heightCm
+  ) return null;
+
+  const legLengthCm = heightCm - sittingHeightCm;
+  const weightHeightRatio = (weightKg / heightCm) * 100;
+  const maturityOffset = sex === 'M'
+    ? -9.236 +
+      0.0002708 * (legLengthCm * sittingHeightCm) -
+      0.001663 * (ageDecimal * legLengthCm) +
+      0.007216 * (ageDecimal * sittingHeightCm) +
+      0.02292 * weightHeightRatio
+    : -9.376 +
+      0.0001882 * (legLengthCm * sittingHeightCm) +
+      0.0022 * (ageDecimal * legLengthCm) +
+      0.005841 * (ageDecimal * sittingHeightCm) -
+      0.002658 * (ageDecimal * weightKg) +
+      0.07693 * weightHeightRatio;
+
+  return ageDecimal - maturityOffset;
 };
 
 const classifyFat = (sex: Athlete['sex'], value: number | null) => {
@@ -1048,7 +1075,7 @@ function AssessmentView({
     const f = assessment.raw?.flexibility ?? {};
     const p = assessment.raw?.performance ?? {};
     return {
-      weight: s(a.pesoKg), height: s(a.estaturaCm), imc: s(a.imc), fat: s(a.pctGrasa), masa: s(a.pctMasa),
+      weight: s(a.pesoKg), height: s(a.estaturaCm), sittingHeight: s(a.estaturaSentadoCm), imc: s(a.imc), fat: s(a.pctGrasa), masa: s(a.pctMasa),
       restingHr: s(c.fcReposo), fcInicial: s(c.fcInicial), fcFinal: s(c.fcFinal), fcMax: s(c.fcMax),
       colFlex: s(r.columnaFlexion), colExt: s(r.columnaExtension),
       hombRotIntIzq: s(r.hombroRotIntIzq), hombRotIntDer: s(r.hombroRotIntDer),
@@ -1131,6 +1158,7 @@ function AssessmentView({
   const cmjValue = toNumber(draft.cmj);
   const weightValue = toNumber(draft.weight);
   const heightValue = toNumber(draft.height);
+  const sittingHeightValue = toNumber(draft.sittingHeight);
   const imcValue = toNumber(draft.imc);
   const speed10mValue = toNumber(draft.speed10m);
   const selectedSprintConfig =
@@ -1143,7 +1171,7 @@ function AssessmentView({
   const vo2Value = toNumber(draft.vo2);
   const kmh = kmhFromSprint(sprintDistanceM, sprintValue);
   const age = chronologicalAge(athlete.birthDate, assessment.date);
-  const bioAge = biologicalAge(athlete.sex, athlete.birthDate, assessment.date, heightValue);
+  const bioAge = biologicalAge(athlete.sex, athlete.birthDate, assessment.date, heightValue, sittingHeightValue, weightValue);
   const fatStatus = classifyFat(athlete.sex, fatValue);
   const hrStatus = classifyRestingHr(restingHrValue);
   const sitReachStatus = classifySitReach(athlete.sex, sitReachValue);
@@ -1182,6 +1210,7 @@ function AssessmentView({
         ...(assessment.raw?.anthropometry ?? {}),
         pesoKg: weightValue ?? undefined,
         estaturaCm: heightValue ?? undefined,
+        estaturaSentadoCm: sittingHeightValue ?? undefined,
         imc: imcValue ?? undefined,
         pctGrasa: fatValue ?? undefined,
         pctMasa: toNumber(draft.masa) ?? undefined,
@@ -1284,7 +1313,10 @@ function AssessmentView({
               <input readOnly value={age == null ? '—' : `${age} años`} className="field-control" />
             </FormField>
             <FormField label="Edad biologica estimada">
-              <input readOnly value={bioAge == null ? 'Falta estatura' : `${bioAge.toFixed(1)} años`} className="field-control" />
+              <input readOnly value={bioAge == null ? 'Falta peso, estatura o estatura sentado' : `${bioAge.toFixed(1)} años`} className="field-control" />
+            </FormField>
+            <FormField label="Estatura sentado (cm)">
+              <input disabled={!isAdmin} inputMode="decimal" value={draft.sittingHeight} onChange={(event) => updateDraft('sittingHeight', event.target.value)} placeholder="Ej. 83" className="field-control" />
             </FormField>
             <FormField label="Sexo">
               <select disabled={!isAdmin} defaultValue={athlete.sex} className="field-control">
@@ -1551,13 +1583,21 @@ function PublicAssessmentView({
 }) {
   const assessment = assessmentOverride ?? athlete.assessments[0];
   const bodyProfile = demoBodyProfile[athlete.id] ?? demoBodyProfile.daniel;
+  const anthropometry = assessment.raw?.anthropometry;
   const profile = {
     weight: assessment.profile?.weight ?? bodyProfile.weight,
     height: assessment.profile?.height ?? bodyProfile.height,
     chronologicalAge: assessment.profile?.chronologicalAge ?? chronologicalAge(athlete.birthDate, assessment.date),
     biologicalAge:
       assessment.profile?.biologicalAge ??
-      biologicalAge(athlete.sex, athlete.birthDate, assessment.date, assessment.profile?.height ?? bodyProfile.height),
+      biologicalAge(
+        athlete.sex,
+        athlete.birthDate,
+        assessment.date,
+        anthropometry?.estaturaCm ?? assessment.profile?.height ?? bodyProfile.height,
+        anthropometry?.estaturaSentadoCm ?? null,
+        anthropometry?.pesoKg ?? assessment.profile?.weight ?? bodyProfile.weight,
+      ),
     speed10m: assessment.profile?.speed10m,
     squat1rm: assessment.profile?.squat1rm,
     vo2: assessment.profile?.vo2,
