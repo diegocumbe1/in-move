@@ -55,7 +55,7 @@ import * as api from '@/lib/actions';
 import { uploadAthletePhoto } from '@/lib/upload';
 import { createClient as createSupabaseClient } from '@/lib/supabase/client';
 import type { AssessmentDraftInput } from '@/lib/form-types';
-import type { CatalogKind, FichaTheme } from '@/lib/ficha';
+import { FICHA_SECTION_KEYS, FICHA_SECTION_LABELS, sectionsForCategory, type CatalogKind, type FichaSectionsConfig, type FichaSectionKey, type FichaTheme } from '@/lib/ficha';
 
 const viewItems: Array<{ id: ViewId; label: string; icon: typeof UsersRound }> = [
   { id: 'dashboard', label: 'Panel', icon: Home },
@@ -228,6 +228,7 @@ export default function MockMvpApp() {
   const [formAssessment, setFormAssessment] = useState<Assessment | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [fichaTheme, setFichaThemeState] = useState<FichaTheme>('light');
+  const [fichaSectionsByCategory, setFichaSectionsByCategory] = useState<FichaSectionsConfig>({});
 
   useEffect(() => {
     let active = true;
@@ -238,6 +239,7 @@ export default function MockMvpApp() {
         setMockAthletes(data.athletes);
         setSettings(data.settings);
         setFichaThemeState(data.fichaTheme);
+        setFichaSectionsByCategory(data.fichaSectionsByCategory);
         setSelectedId((current) => current || data.athletes[0]?.id || '');
         setLoading(false);
       })
@@ -308,12 +310,18 @@ export default function MockMvpApp() {
     setMockAthletes(data.athletes);
     setSettings(data.settings);
     setFichaThemeState(data.fichaTheme);
+    setFichaSectionsByCategory(data.fichaSectionsByCategory);
     router.refresh();
   }
 
   async function changeFichaTheme(theme: FichaTheme) {
     setFichaThemeState(theme);
     await api.setFichaTheme(theme);
+  }
+
+  async function changeFichaSections(categoryName: string, sections: FichaSectionKey[]) {
+    setFichaSectionsByCategory((current) => ({ ...current, [categoryName]: sections }));
+    await api.setFichaSectionsForCategory(categoryName, sections);
   }
 
   async function saveAssessmentDraft(athleteId: string, draft: AssessmentDraftInput, assessmentId?: string) {
@@ -567,6 +575,8 @@ export default function MockMvpApp() {
                   onReload={reload}
                   fichaTheme={fichaTheme}
                   onFichaTheme={changeFichaTheme}
+                  fichaSectionsByCategory={fichaSectionsByCategory}
+                  onFichaSections={changeFichaSections}
                   sampleFichaId={mockAthletes.find((a) => a.assessments.some((s) => s.id))?.assessments.find((s) => s.id)?.id}
                 />
               ) : null}
@@ -1075,7 +1085,7 @@ function AssessmentView({
     const f = assessment.raw?.flexibility ?? {};
     const p = assessment.raw?.performance ?? {};
     return {
-      weight: s(a.pesoKg), height: s(a.estaturaCm), sittingHeight: s(a.estaturaSentadoCm), imc: s(a.imc), fat: s(a.pctGrasa), masa: s(a.pctMasa),
+      weight: s(a.pesoKg), height: s(a.estaturaCm), sittingHeight: s(a.estaturaSentadoCm), wingspan: s(a.envergaduraCm), imc: s(a.imc), fat: s(a.pctGrasa), masa: s(a.pctMasa),
       restingHr: s(c.fcReposo), fcInicial: s(c.fcInicial), fcFinal: s(c.fcFinal), fcMax: s(c.fcMax),
       colFlex: s(r.columnaFlexion), colExt: s(r.columnaExtension),
       hombRotIntIzq: s(r.hombroRotIntIzq), hombRotIntDer: s(r.hombroRotIntDer),
@@ -1211,6 +1221,7 @@ function AssessmentView({
         pesoKg: weightValue ?? undefined,
         estaturaCm: heightValue ?? undefined,
         estaturaSentadoCm: sittingHeightValue ?? undefined,
+        envergaduraCm: toNumber(draft.wingspan) ?? undefined,
         imc: imcValue ?? undefined,
         pctGrasa: fatValue ?? undefined,
         pctMasa: toNumber(draft.masa) ?? undefined,
@@ -1315,9 +1326,6 @@ function AssessmentView({
             <FormField label="Edad biologica estimada">
               <input readOnly value={bioAge == null ? 'Falta peso, estatura o estatura sentado' : `${bioAge.toFixed(1)} años`} className="field-control" />
             </FormField>
-            <FormField label="Estatura sentado (cm)">
-              <input disabled={!isAdmin} inputMode="decimal" value={draft.sittingHeight} onChange={(event) => updateDraft('sittingHeight', event.target.value)} placeholder="Ej. 83" className="field-control" />
-            </FormField>
             <FormField label="Sexo">
               <select disabled={!isAdmin} defaultValue={athlete.sex} className="field-control">
                 <option className="bg-surface" value="M">Masculino</option>
@@ -1354,6 +1362,12 @@ function AssessmentView({
           </FormField>
           <FormField label="Estatura (cm)">
             <input disabled={!isAdmin} inputMode="decimal" value={draft.height} onChange={(event) => updateDraft('height', event.target.value)} placeholder="162" className="field-control" />
+          </FormField>
+          <FormField label="Estatura sentado (cm)">
+            <input disabled={!isAdmin} inputMode="decimal" value={draft.sittingHeight} onChange={(event) => updateDraft('sittingHeight', event.target.value)} placeholder="Ej. 83" className="field-control" />
+          </FormField>
+          <FormField label="Envergadura (cm)">
+            <input disabled={!isAdmin} inputMode="decimal" value={draft.wingspan} onChange={(event) => updateDraft('wingspan', event.target.value)} placeholder="Ej. 168" className="field-control" />
           </FormField>
           <FormField label="IMC">
             <input disabled={!isAdmin} inputMode="decimal" value={draft.imc} onChange={(event) => updateDraft('imc', event.target.value)} placeholder="Ej. 21.9" className="field-control" />
@@ -2416,12 +2430,16 @@ function SettingsView({
   onReload,
   fichaTheme,
   onFichaTheme,
+  fichaSectionsByCategory,
+  onFichaSections,
   sampleFichaId,
 }: {
   settings: ProductSettings;
   onReload: () => Promise<void>;
   fichaTheme: FichaTheme;
   onFichaTheme: (theme: FichaTheme) => Promise<void>;
+  fichaSectionsByCategory: FichaSectionsConfig;
+  onFichaSections: (category: string, sections: FichaSectionKey[]) => Promise<void>;
   sampleFichaId?: string;
 }) {
   return (
@@ -2459,11 +2477,81 @@ function SettingsView({
         </div>
       </section>
 
+      <section className="surface-1 rounded-lg p-4 md:p-5">
+        <SectionHeader eyebrow="Ficha por categoría" title="Secciones visibles" />
+        <p className="-mt-2 mb-4 text-sm text-muted-foreground">
+          Elige qué secciones aparecen en la ficha pública (y el PDF) según la categoría del deportista.
+          Sin selección, se muestran todas.
+        </p>
+        {settings.categories.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Crea una categoría para configurarla.</p>
+        ) : (
+          <div className="grid gap-4 lg:grid-cols-2">
+            {settings.categories.map((category) => (
+              <CategorySectionsCard
+                key={category}
+                category={category}
+                selected={sectionsForCategory(fichaSectionsByCategory, category)}
+                onChange={(sections) => onFichaSections(category, sections)}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+
       <div className="grid gap-5 xl:grid-cols-2">
         <SettingsList title="Categorías" description="Tipos de atención del deportista." kind="category" values={settings.categories} onReload={onReload} />
         <SettingsList title="Grupos" description="Equipos o cohortes (ej. Running, Cofisam)." kind="group" values={settings.groups} onReload={onReload} />
         <SettingsList title="Deportes" description="Opciones del perfil del deportista." kind="sport" values={settings.sports} onReload={onReload} />
         <SettingsList title="Perfiles / posiciones" description="Rol deportivo o enfoque de entrenamiento." kind="position" values={settings.positions} onReload={onReload} />
+      </div>
+    </div>
+  );
+}
+
+function CategorySectionsCard({
+  category,
+  selected,
+  onChange,
+}: {
+  category: string;
+  selected: FichaSectionKey[];
+  onChange: (sections: FichaSectionKey[]) => void;
+}) {
+  const isOn = (key: FichaSectionKey) => selected.includes(key);
+
+  function toggle(key: FichaSectionKey) {
+    // Mantiene el orden canónico de FICHA_SECTION_KEYS al reconstruir la lista.
+    const next = FICHA_SECTION_KEYS.filter((k) => (k === key ? !isOn(key) : isOn(k)));
+    onChange(next);
+  }
+
+  return (
+    <div className="rounded-md border border-border bg-background/35 p-4">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <span className="text-sm font-bold text-foreground">{category}</span>
+        <div className="flex gap-2 text-xs font-semibold">
+          <button type="button" onClick={() => onChange([...FICHA_SECTION_KEYS])} className="text-brand hover:underline">
+            Todas
+          </button>
+          <span className="text-muted-foreground">·</span>
+          <button type="button" onClick={() => onChange([])} className="text-muted-foreground hover:text-foreground hover:underline">
+            Ninguna
+          </button>
+        </div>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {FICHA_SECTION_KEYS.map((key) => (
+          <label key={key} className="flex cursor-pointer items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={isOn(key)}
+              onChange={() => toggle(key)}
+              className="size-4 accent-[var(--brand,#16a34a)]"
+            />
+            <span className={isOn(key) ? 'text-foreground' : 'text-muted-foreground'}>{FICHA_SECTION_LABELS[key]}</span>
+          </label>
+        ))}
       </div>
     </div>
   );

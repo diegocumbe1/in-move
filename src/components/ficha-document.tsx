@@ -2,7 +2,7 @@
 
 import { Fragment, useState } from 'react';
 import Image from 'next/image';
-import type { Anthropometry, Cardio, Flexibility, Performance, Rom } from '@/lib/ficha';
+import type { Anthropometry, Cardio, Flexibility, Performance, Rom, FichaSectionKey } from '@/lib/ficha';
 import { biologicalAge } from '@/lib/scales';
 
 /**
@@ -83,6 +83,36 @@ function JointCard({ title, children }: { title: string; children: React.ReactNo
   );
 }
 
+/** Tarjeta de un levantamiento (Sentadilla / Press banca): cada medida en su casilla. */
+function LiftCard({
+  title,
+  cargaKg,
+  vmMs,
+  potenciaW,
+  rmKg,
+  pct,
+}: {
+  title: string;
+  cargaKg?: number | null;
+  vmMs?: number | null;
+  potenciaW?: number | null;
+  rmKg?: number | null;
+  pct?: number | null;
+}) {
+  return (
+    <div className="overflow-hidden rounded-lg border border-[var(--fc-line)] bg-[var(--fc-card)]">
+      <div className="bg-green-700 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-white">{title}</div>
+      <div className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-3">
+        <Metric label="Carga (kg)" value={val(cargaKg)} />
+        <Metric label="Vel. media (m/s)" value={val(vmMs)} />
+        <Metric label="Potencia (W)" value={val(potenciaW)} />
+        <Metric label="1RM (kg)" value={val(rmKg)} />
+        <Metric label="% 1RM" value={val(pct, ' %')} />
+      </div>
+    </div>
+  );
+}
+
 function AthletePhoto({ src, alt }: { src?: string | null; alt: string }) {
   const [loaded, setLoaded] = useState(false);
 
@@ -150,12 +180,15 @@ function BilateralJoint({ title, rows }: { title: string; rows: { label: string;
   );
 }
 
-export function FichaDocument({ data }: { data: FichaData }) {
+export function FichaDocument({ data, sections }: { data: FichaData; sections?: FichaSectionKey[] }) {
   const a = data.anthropometry ?? {};
   const c = data.cardio ?? {};
   const r = data.rom ?? {};
   const f = data.flexibility ?? {};
   const p = data.performance ?? {};
+
+  // Sin config (undefined) = mostrar todo; con config, solo las secciones habilitadas.
+  const show = (key: FichaSectionKey) => !sections || sections.includes(key);
 
   const imc = a.imc ?? null;
   const bioAge = biologicalAge(data.sex, data.birthDate, data.assessedOn, a.estaturaCm, a.estaturaSentadoCm, a.pesoKg);
@@ -191,88 +224,131 @@ export function FichaDocument({ data }: { data: FichaData }) {
         <AthletePhoto src={data.photoUrl} alt={data.name} />
       </div>
 
-      <SectionTitle>Indicadores de rendimiento</SectionTitle>
-      <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-5">
-        <Metric label="Peso (kg)" value={val(a.pesoKg)} />
-        <Metric label="Estatura (cm)" value={val(a.estaturaCm)} />
-        <Metric label="Estatura sentado (cm)" value={val(a.estaturaSentadoCm)} />
-        <Metric label="IMC" value={imc == null ? '—' : imc.toFixed(1)} />
-        <Metric label="% Grasa" value={val(a.pctGrasa, ' %')} />
-        <Metric label="% Masa corporal" value={val(a.pctMasa, ' %')} />
-      </div>
+      {show('anthropometry') && (
+        <>
+          <SectionTitle>Indicadores de rendimiento</SectionTitle>
+          <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-5">
+            <Metric label="Peso (kg)" value={val(a.pesoKg)} />
+            <Metric label="Estatura (cm)" value={val(a.estaturaCm)} />
+            <Metric label="Estatura sentado (cm)" value={val(a.estaturaSentadoCm)} />
+            <Metric label="Envergadura (cm)" value={val(a.envergaduraCm)} />
+            <Metric label="IMC" value={imc == null ? '—' : imc.toFixed(1)} />
+            <Metric label="% Grasa" value={val(a.pctGrasa, ' %')} />
+            <Metric label="% Masa corporal" value={val(a.pctMasa, ' %')} />
+          </div>
+        </>
+      )}
 
-      <SectionTitle>Movilidad articular (ROM · grados)</SectionTitle>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <SingleJoint
-          title="Columna"
-          rows={[
-            { label: 'Flexión', value: r.columnaFlexion },
-            { label: 'Extensión', value: r.columnaExtension },
-          ]}
-        />
-        <BilateralJoint
-          title="Hombros"
-          rows={[
-            { label: 'Rotación interna', izq: r.hombroRotIntIzq, der: r.hombroRotIntDer },
-            { label: 'Rotación externa', izq: r.hombroRotExtIzq, der: r.hombroRotExtDer },
-            { label: 'Flexión', izq: r.hombroFlexionIzq, der: r.hombroFlexionDer },
-          ]}
-        />
-        <BilateralJoint title="Cadera" rows={[{ label: 'Flexión', izq: r.caderaFlexionIzq, der: r.caderaFlexionDer }]} />
-        <BilateralJoint title="Rodilla" rows={[{ label: 'Flexión', izq: r.rodillaFlexionIzq, der: r.rodillaFlexionDer }]} />
-        {r.otraLabel ? <SingleJoint title={r.otraLabel} rows={[{ label: 'Valor', value: r.otraValor }]} /> : null}
-      </div>
-      <p className="mt-2 text-[11px] text-[var(--fc-muted)]">
-        <span className="mr-1 inline-block size-1.5 rounded-full bg-amber-500 align-middle" /> Asimetría izquierda/derecha ≥ 10°.
-      </p>
+      {show('rom') && (
+        <>
+          <SectionTitle>Movilidad articular (ROM · grados)</SectionTitle>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <SingleJoint
+              title="Columna"
+              rows={[
+                { label: 'Flexión', value: r.columnaFlexion },
+                { label: 'Extensión', value: r.columnaExtension },
+              ]}
+            />
+            <BilateralJoint
+              title="Hombros"
+              rows={[
+                { label: 'Rotación interna', izq: r.hombroRotIntIzq, der: r.hombroRotIntDer },
+                { label: 'Rotación externa', izq: r.hombroRotExtIzq, der: r.hombroRotExtDer },
+                { label: 'Flexión', izq: r.hombroFlexionIzq, der: r.hombroFlexionDer },
+              ]}
+            />
+            <BilateralJoint title="Cadera" rows={[{ label: 'Flexión', izq: r.caderaFlexionIzq, der: r.caderaFlexionDer }]} />
+            <BilateralJoint title="Rodilla" rows={[{ label: 'Flexión', izq: r.rodillaFlexionIzq, der: r.rodillaFlexionDer }]} />
+            {r.otraLabel ? <SingleJoint title={r.otraLabel} rows={[{ label: 'Valor', value: r.otraValor }]} /> : null}
+          </div>
+          <p className="mt-2 text-[11px] text-[var(--fc-muted)]">
+            <span className="mr-1 inline-block size-1.5 rounded-full bg-amber-500 align-middle" /> Asimetría izquierda/derecha ≥ 10°.
+          </p>
+        </>
+      )}
 
-      <SectionTitle>Flexibilidad</SectionTitle>
-      <div className="grid gap-2 sm:grid-cols-3">
-        <Metric label="Prueba aplicada" value={f.pruebaAplicada || 'Sit and Reach'} />
-        <Metric label="Resultado" value={val(f.resultadoCm, ' cm')} />
-        <Metric label="Observación" value={f.observacion || '—'} />
-      </div>
+      {show('flexibility') && (
+        <>
+          <SectionTitle>Flexibilidad</SectionTitle>
+          <div className="grid gap-2 sm:grid-cols-3">
+            <Metric label="Prueba aplicada" value={f.pruebaAplicada || 'Sit and Reach'} />
+            <Metric label="Resultado" value={val(f.resultadoCm, ' cm')} />
+            <Metric label="Observación" value={f.observacion || '—'} />
+          </div>
+        </>
+      )}
 
-      <SectionTitle>Control cardiovascular</SectionTitle>
-      <div className="grid gap-2 sm:grid-cols-4">
-        <Metric label="FC reposo (ppm)" value={val(c.fcReposo)} />
-        <Metric label="FC inicial (ppm)" value={val(c.fcInicial)} />
-        <Metric label="FC final (ppm)" value={val(c.fcFinal)} />
-        <Metric label="FC máxima (ppm)" value={val(c.fcMax)} />
-      </div>
+      {show('cardio') && (
+        <>
+          <SectionTitle>Control cardiovascular</SectionTitle>
+          <div className="grid gap-2 sm:grid-cols-4">
+            <Metric label="FC reposo (ppm)" value={val(c.fcReposo)} />
+            <Metric label="FC inicial (ppm)" value={val(c.fcInicial)} />
+            <Metric label="FC final (ppm)" value={val(c.fcFinal)} />
+            <Metric label="FC máxima (ppm)" value={val(c.fcMax)} />
+          </div>
+        </>
+      )}
 
-      <SectionTitle>Rendimiento</SectionTitle>
-      <div className="grid gap-2 sm:grid-cols-4">
-        <Metric label="Squat Jump (cm)" value={val(p.sjCm)} />
-        <Metric label="CMJ (cm)" value={val(p.cmjCm)} />
-        <Metric label="Abalakov (cm)" value={val(p.abalakovCm)} />
-        <Metric label="Salto unilat. I/D (cm)" value={`${val(p.saltoUnilateralIzqCm)} / ${val(p.saltoUnilateralDerCm)}`} />
-        <Metric label="Fuerza máxima (kg)" value={val(p.fuerzaMaximaKg)} />
-        <Metric label="Sentadilla (carga · Vm · W)" value={`${val(p.sentadillaCargaKg, ' kg')} · ${val(p.sentadillaVelocidadMediaMs, ' m/s')} · ${val(p.sentadillaPotenciaW, ' W')}`} />
-        <Metric label="1RM sentadilla" value={val(p.sentadilla1rmKg, ' kg')} />
-        <Metric label="Press banca (carga · Vm · W)" value={`${val(p.pressBancaCargaKg, ' kg')} · ${val(p.pressBancaVelocidadMediaMs, ' m/s')} · ${val(p.pressBancaPotenciaW, ' W')}`} />
-        <Metric label="1RM banca" value={val(p.pressBanca1rmKg, ' kg')} />
-        <Metric label="% 1RM sentadilla" value={val(p.pct1rmSentadilla, ' %')} />
-        <Metric label="% 1RM banca" value={val(p.pct1rmPressBanca, ' %')} />
-      </div>
+      {show('performance') && (
+        <>
+          <SectionTitle>Rendimiento · Saltos</SectionTitle>
+          <div className="grid gap-2 sm:grid-cols-4 lg:grid-cols-5">
+            <Metric label="Squat Jump (cm)" value={val(p.sjCm)} />
+            <Metric label="CMJ (cm)" value={val(p.cmjCm)} />
+            <Metric label="Abalakov (cm)" value={val(p.abalakovCm)} />
+            <Metric label="Salto unilat. I/D (cm)" value={`${val(p.saltoUnilateralIzqCm)} / ${val(p.saltoUnilateralDerCm)}`} />
+            <Metric label="Fuerza máxima (kg)" value={val(p.fuerzaMaximaKg)} />
+          </div>
 
-      <SectionTitle>Velocidad y agilidad</SectionTitle>
-      <div className="grid gap-2 sm:grid-cols-4">
-        <Metric label="Velocidad 10 m (s)" value={val(p.velocidad10mS)} />
-        <Metric label="Velocidad 20 m (s)" value={val(p.velocidad20mS)} />
-        <Metric label="Velocidad 30 m (s)" value={val(p.velocidad30mS)} />
-        <Metric label={p.agilidadLabel ? `${p.agilidadLabel} (s)` : 'Test de agilidad (s)'} value={val(p.agilidad505S)} />
-      </div>
+          <SectionTitle>Rendimiento · Fuerza (encoder)</SectionTitle>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <LiftCard
+              title="Sentadilla"
+              cargaKg={p.sentadillaCargaKg}
+              vmMs={p.sentadillaVelocidadMediaMs}
+              potenciaW={p.sentadillaPotenciaW}
+              rmKg={p.sentadilla1rmKg}
+              pct={p.pct1rmSentadilla}
+            />
+            <LiftCard
+              title="Press banca"
+              cargaKg={p.pressBancaCargaKg}
+              vmMs={p.pressBancaVelocidadMediaMs}
+              potenciaW={p.pressBancaPotenciaW}
+              rmKg={p.pressBanca1rmKg}
+              pct={p.pct1rmPressBanca}
+            />
+          </div>
+        </>
+      )}
 
-      <SectionTitle>Observaciones generales</SectionTitle>
-      <div className="min-h-[56px] rounded-md border border-[var(--fc-line)] bg-[var(--fc-card)] px-3 py-2 text-sm text-[var(--fc-ink)]">
-        {data.observations || '—'}
-      </div>
+      {show('speed') && (
+        <>
+          <SectionTitle>Velocidad y agilidad</SectionTitle>
+          <div className="grid gap-2 sm:grid-cols-4">
+            <Metric label="Velocidad 10 m (s)" value={val(p.velocidad10mS)} />
+            <Metric label="Velocidad 20 m (s)" value={val(p.velocidad20mS)} />
+            <Metric label="Velocidad 30 m (s)" value={val(p.velocidad30mS)} />
+            <Metric label={p.agilidadLabel ? `${p.agilidadLabel} (s)` : 'Test de agilidad (s)'} value={val(p.agilidad505S)} />
+          </div>
+        </>
+      )}
 
-      <SectionTitle>Plan de intervención</SectionTitle>
-      <div className="min-h-[56px] rounded-md border border-[var(--fc-line)] bg-[var(--fc-card)] px-3 py-2 text-sm text-[var(--fc-ink)]">
-        {data.plan || '—'}
-      </div>
+      {show('observations') && (
+        <>
+          <SectionTitle>Observaciones generales</SectionTitle>
+          <div className="min-h-[56px] rounded-md border border-[var(--fc-line)] bg-[var(--fc-card)] px-3 py-2 text-sm text-[var(--fc-ink)]">
+            {data.observations || '—'}
+          </div>
+
+          <SectionTitle>Plan de intervención</SectionTitle>
+          <div className="min-h-[56px] rounded-md border border-[var(--fc-line)] bg-[var(--fc-card)] px-3 py-2 text-sm text-[var(--fc-ink)]">
+            {data.plan || '—'}
+          </div>
+        </>
+      )}
 
       <p className="mt-5 text-center text-[11px] text-[var(--fc-accent)]">
         In Move · Centro de Evaluación y Rendimiento · Fecha valoración {fmtDate(data.updatedAt || data.assessedOn)} · Código {data.code}

@@ -7,7 +7,7 @@ import { buildAssessment, deriveStatus } from '@/lib/scales';
 import { emptyAssessment, generateCode, todayIso } from '@/lib/mock-product';
 import type { Athlete, ProductSettings } from '@/lib/mock-product';
 import type { NewAthleteInput, AssessmentDraftInput } from '@/lib/form-types';
-import type { CatalogKind } from '@/lib/ficha';
+import { defaultFichaSections, FICHA_SECTION_KEYS, type CatalogKind, type FichaSectionsConfig, type FichaSectionKey } from '@/lib/ficha';
 import { publicPhotoUrl } from '@/lib/photo';
 
 const num = (value: string): number | undefined => {
@@ -65,12 +65,14 @@ export async function getInitialData(): Promise<{
   athletes: Athlete[];
   settings: ProductSettings;
   fichaTheme: 'light' | 'dark';
+  fichaSectionsByCategory: FichaSectionsConfig;
 }> {
-  const [athleteRows, assessmentRows, catalogRows, fichaTheme] = await Promise.all([
+  const [athleteRows, assessmentRows, catalogRows, fichaTheme, fichaSectionsByCategory] = await Promise.all([
     db.select().from(athletes).orderBy(desc(athletes.createdAt)),
     db.select().from(assessments),
     db.select().from(catalogItems).orderBy(catalogItems.sort),
     getFichaTheme(),
+    getFichaSectionsByCategory(),
   ]);
 
   // Todas las valoraciones por deportista, más recientes primero.
@@ -98,7 +100,7 @@ export async function getInitialData(): Promise<{
     positions: byKind('position'),
   };
 
-  return { athletes: mapped, settings, fichaTheme };
+  return { athletes: mapped, settings, fichaTheme, fichaSectionsByCategory };
 }
 
 export async function createAthlete(input: NewAthleteInput): Promise<Athlete> {
@@ -166,6 +168,7 @@ export async function saveAssessment(
       pesoKg: num(draft.weight),
       estaturaCm: num(draft.height),
       estaturaSentadoCm: num(draft.sittingHeight),
+      envergaduraCm: num(draft.wingspan),
       imc: num(draft.imc),
       pctGrasa: num(draft.fat),
       pctMasa: num(draft.masa),
@@ -254,6 +257,37 @@ export async function setFichaTheme(theme: 'light' | 'dark'): Promise<void> {
     .insert(appSettings)
     .values({ key: 'ficha_theme', value: theme })
     .onConflictDoUpdate({ target: appSettings.key, set: { value: theme } });
+}
+
+export async function getFichaSectionsByCategory(): Promise<FichaSectionsConfig> {
+  const [row] = await db.select().from(appSettings).where(eq(appSettings.key, 'ficha_sections_by_category')).limit(1);
+  if (!row?.value) return {};
+  try {
+    const parsed = JSON.parse(row.value) as Record<string, unknown>;
+    const allowed = new Set<FichaSectionKey>(FICHA_SECTION_KEYS);
+    return Object.fromEntries(
+      Object.entries(parsed).map(([category, sections]) => [
+        category,
+        Array.isArray(sections)
+          ? sections.filter((section): section is FichaSectionKey => allowed.has(section as FichaSectionKey))
+          : defaultFichaSections,
+      ]),
+    );
+  } catch {
+    return {};
+  }
+}
+
+export async function setFichaSectionsForCategory(category: string, sections: FichaSectionKey[]): Promise<void> {
+  const clean = category.trim();
+  if (!clean) return;
+  const allowed = new Set<FichaSectionKey>(FICHA_SECTION_KEYS);
+  const current = await getFichaSectionsByCategory();
+  current[clean] = sections.filter((section) => allowed.has(section));
+  await db
+    .insert(appSettings)
+    .values({ key: 'ficha_sections_by_category', value: JSON.stringify(current) })
+    .onConflictDoUpdate({ target: appSettings.key, set: { value: JSON.stringify(current) } });
 }
 
 export async function addCatalogItem(kind: CatalogKind, label: string): Promise<void> {
