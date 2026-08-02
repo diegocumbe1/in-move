@@ -1,6 +1,6 @@
 'use server';
 
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, isNull } from 'drizzle-orm';
 import { db } from '@/db';
 import { athletes, assessments, catalogItems, appSettings } from '@/db/schema';
 import { buildAssessment, deriveStatus } from '@/lib/scales';
@@ -69,7 +69,7 @@ export async function getInitialData(): Promise<{
 }> {
   const [athleteRows, assessmentRows, catalogRows, fichaTheme, fichaSectionsByCategory] = await Promise.all([
     db.select().from(athletes).orderBy(desc(athletes.createdAt)),
-    db.select().from(assessments),
+    db.select().from(assessments).where(isNull(assessments.deletedAt)),
     db.select().from(catalogItems).orderBy(catalogItems.sort),
     getFichaTheme(),
     getFichaSectionsByCategory(),
@@ -201,12 +201,12 @@ export async function saveAssessment(
       observacion: draft.flexObs.trim() || undefined,
     },
     performance: {
-      sjCm: num(draft.sj),
+      dropJumpCm: num(draft.dropJump),
       cmjCm: num(draft.cmj),
       abalakovCm: num(draft.abalakov),
       saltoUnilateralDerCm: num(draft.saltoUniDer),
       saltoUnilateralIzqCm: num(draft.saltoUniIzq),
-      fuerzaMaximaKg: num(draft.fuerzaMax),
+      rsi: num(draft.rsi),
       sentadillaCargaKg: num(draft.squatLoad),
       sentadilla1rmKg: num(draft.squat1rm),
       sentadillaVelocidadMediaMs: num(draft.squatVm),
@@ -241,6 +241,24 @@ export async function saveAssessment(
     .values({ athleteId, assessedOn: todayIso(), ...values })
     .returning({ id: assessments.id });
   return row.id;
+}
+
+/**
+ * Elimina una ficha (borrado lógico) exigiendo una justificación.
+ * La fila se conserva en BD con `deletedAt` + `deletedReason` para auditoría;
+ * deja de listarse en la app y la ruta pública /ficha/[id] responde 404.
+ */
+export async function deleteAssessment(assessmentId: string, reason: string): Promise<void> {
+  const clean = reason.trim();
+  if (clean.length < 5) throw new Error('La justificación es obligatoria (mínimo 5 caracteres).');
+
+  const result = await db
+    .update(assessments)
+    .set({ deletedAt: new Date(), deletedReason: clean.slice(0, 500), updatedAt: new Date() })
+    .where(and(eq(assessments.id, assessmentId), isNull(assessments.deletedAt)))
+    .returning({ id: assessments.id });
+
+  if (!result.length) throw new Error('La ficha no existe o ya fue eliminada.');
 }
 
 // ---- Catálogos (variables editables por el admin) ----

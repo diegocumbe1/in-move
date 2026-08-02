@@ -56,6 +56,16 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="es" suppressHydrationWarning>
+      <head>
+        {/* Aplica el tema de la plataforma (localStorage) antes del primer pintado
+            para evitar el parpadeo oscuro→claro. La ficha pública usa su propio scope. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "try{if(localStorage.getItem('inmove-theme')==='light')document.documentElement.dataset.theme='light';}catch(e){}",
+          }}
+        />
+      </head>
       <body className={`${display.variable} ${body.variable} ${mono.variable}`}>
         {children}
         <RegisterSW />

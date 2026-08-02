@@ -96,15 +96,22 @@ function RadarSvg({ axes, large = false }: { axes: RadarAxis[]; large?: boolean 
         {axes.map((a, i) => {
           const [x, y] = point(i, 100);
           const offset = 18;
+          // Etiquetas compuestas ("Rendimiento · Salto") se parten en varias líneas
+          // para no salirse del viewBox en los ejes laterales.
+          const lines = a.label.split(' · ');
+          const lineHeight = 13;
           const lx = i === 1 ? x + offset : i === 3 ? x - offset : x;
-          const ly = i === 0 ? y - offset : i === 2 ? y + offset : y;
+          const baseY = i === 0 ? y - offset : i === 2 ? y + offset : y;
+          const ly = i === 0 ? baseY - (lines.length - 1) * lineHeight : baseY;
           const anchor = i === 1 ? 'start' : i === 3 ? 'end' : 'middle';
           return (
             <g key={a.label}>
-              <text x={lx} y={ly} textAnchor={anchor} fill="var(--fc-ink)" fontSize="12" fontWeight="700">
-                {a.label}
-              </text>
-              <text x={lx} y={ly + 14} textAnchor={anchor} fill="var(--fc-muted)" fontSize="10">
+              {lines.map((line, li) => (
+                <text key={line} x={lx} y={ly + li * lineHeight} textAnchor={anchor} fill="var(--fc-ink)" fontSize="12" fontWeight="700">
+                  {line}
+                </text>
+              ))}
+              <text x={lx} y={ly + lines.length * lineHeight + 1} textAnchor={anchor} fill="var(--fc-muted)" fontSize="10">
                 {a.score}/100
               </text>
             </g>

@@ -51,6 +51,10 @@ export const assessments = pgTable('assessments', {
   performance: jsonb('performance').$type<Performance>().default({}),
   observations: text('observations'),
   plan: text('plan'),
+  // Borrado logico: la ficha se oculta de la app y de la ruta publica, pero se
+  // conserva en BD junto con la justificacion (auditoria).
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  deletedReason: text('deleted_reason'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

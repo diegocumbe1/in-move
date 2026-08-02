@@ -56,12 +56,14 @@ export const flexibilitySchema = z.object({
 
 // § 6. Rendimiento (saltos, fuerza, velocidad/agilidad)
 export const performanceSchema = z.object({
-  sjCm: z.number().optional(),
+  dropJumpCm: z.number().optional(),
+  sjCm: z.number().optional(), // legacy: Squat Jump, reemplazado por dropJumpCm
   cmjCm: z.number().optional(),
   abalakovCm: z.number().optional(),
   saltoUnilateralDerCm: z.number().optional(),
   saltoUnilateralIzqCm: z.number().optional(),
-  fuerzaMaximaKg: z.number().optional(),
+  rsi: z.number().optional(), // Reactive Strength Index (Drop Jump), adimensional
+  fuerzaMaximaKg: z.number().optional(), // legacy: reemplazado por rsi
   sentadillaCargaKg: z.number().optional(),
   sentadilla1rmKg: z.number().optional(),
   sentadillaVelocidadMediaMs: z.number().optional(),

@@ -31,8 +31,9 @@ export default async function FichaPublicaPage({
     flexibility: data.flexibility,
     performance: data.performance,
   };
-  const comparisons = buildComparison(data.sex, measures);
-  const radar = buildRadar(measures);
+  // La edad decide el baremo aplicado en CMJ y Sit and Reach.
+  const comparisons = buildComparison(data.sex, data.age, measures);
+  const radar = buildRadar(measures, data.age);
 
   return (
     <div className="ficha-scope min-h-dvh bg-[var(--fc-page)] px-4 py-6 print:p-0" data-theme={theme}>

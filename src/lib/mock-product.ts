@@ -3,7 +3,7 @@ import type { Anthropometry, Cardio, Rom, Flexibility, Performance } from '@/lib
 
 export type ViewId = 'athletes' | 'assessment' | 'dashboard' | 'settings';
 
-export type RadarKey = 'strength' | 'speed' | 'endurance' | 'jump';
+export type RadarKey = 'strength' | 'speed' | 'agility' | 'jump';
 
 export type RadarMetric = {
   key: RadarKey;
@@ -102,10 +102,10 @@ export const athletes: Athlete[] = [
         date: '2026-07-15',
         score: 78,
         radar: [
-          { key: 'strength', label: 'Fuerza maxima', shortLabel: 'Fuerza', score: 82, team: 70, raw: '95 kg', source: 'Sentadilla 1RM' },
+          { key: 'strength', label: 'Fuerza', shortLabel: 'Fuerza', score: 82, team: 70, raw: '95 kg', source: 'Press banca 1RM' },
           { key: 'speed', label: 'Velocidad punta', shortLabel: 'Velocidad', score: 74, team: 68, raw: '27.4 km/h', source: 'Sprint 10 m' },
-          { key: 'endurance', label: 'Resistencia', shortLabel: 'Resistencia', score: 63, team: 66, raw: '52 ml/kg', source: 'VO2max' },
-          { key: 'jump', label: 'Altura de salto', shortLabel: 'Salto', score: 78, team: 61, raw: '42 cm', source: 'CMJ' },
+          { key: 'agility', label: 'Agilidad', shortLabel: 'Agilidad', score: 63, team: 66, raw: '2.7 s', source: 'Test 5-0-5' },
+          { key: 'jump', label: 'Rendimiento · Salto', shortLabel: 'Salto', score: 78, team: 61, raw: '42 cm', source: 'Drop Jump · CMJ · Abalakov' },
         ],
         metrics: [
           { label: 'Grasa corporal', value: 14, unit: '%', level: 'good', levelLabel: 'Optimo', range: '10-16 %' },
@@ -134,10 +134,10 @@ export const athletes: Athlete[] = [
         date: '2026-05-01',
         score: 66,
         radar: [
-          { key: 'strength', label: 'Fuerza maxima', shortLabel: 'Fuerza', score: 66, team: 70, raw: '78 kg', source: 'Sentadilla 1RM' },
+          { key: 'strength', label: 'Fuerza', shortLabel: 'Fuerza', score: 66, team: 70, raw: '78 kg', source: 'Press banca 1RM' },
           { key: 'speed', label: 'Velocidad punta', shortLabel: 'Velocidad', score: 68, team: 68, raw: '25.8 km/h', source: 'Sprint 10 m' },
-          { key: 'endurance', label: 'Resistencia', shortLabel: 'Resistencia', score: 67, team: 66, raw: '54 ml/kg', source: 'VO2max' },
-          { key: 'jump', label: 'Altura de salto', shortLabel: 'Salto', score: 63, team: 61, raw: '35 cm', source: 'CMJ' },
+          { key: 'agility', label: 'Agilidad', shortLabel: 'Agilidad', score: 67, team: 66, raw: '2.7 s', source: 'Test 5-0-5' },
+          { key: 'jump', label: 'Rendimiento · Salto', shortLabel: 'Salto', score: 63, team: 61, raw: '35 cm', source: 'Drop Jump · CMJ · Abalakov' },
         ],
         metrics: [
           { label: 'Grasa corporal', value: 16, unit: '%', level: 'warning', levelLabel: 'Medio', range: '16-20 %' },
@@ -166,10 +166,10 @@ export const athletes: Athlete[] = [
         date: '2026-07-20',
         score: 72,
         radar: [
-          { key: 'strength', label: 'Fuerza maxima', shortLabel: 'Fuerza', score: 68, team: 62, raw: '64 kg', source: 'Sentadilla 1RM' },
+          { key: 'strength', label: 'Fuerza', shortLabel: 'Fuerza', score: 68, team: 62, raw: '64 kg', source: 'Press banca 1RM' },
           { key: 'speed', label: 'Velocidad punta', shortLabel: 'Velocidad', score: 69, team: 64, raw: '25.1 km/h', source: 'Sprint 10 m' },
-          { key: 'endurance', label: 'Resistencia', shortLabel: 'Resistencia', score: 78, team: 70, raw: '49 ml/kg', source: 'VO2max' },
-          { key: 'jump', label: 'Altura de salto', shortLabel: 'Salto', score: 72, team: 60, raw: '33 cm', source: 'CMJ' },
+          { key: 'agility', label: 'Agilidad', shortLabel: 'Agilidad', score: 78, team: 70, raw: '2.7 s', source: 'Test 5-0-5' },
+          { key: 'jump', label: 'Rendimiento · Salto', shortLabel: 'Salto', score: 72, team: 60, raw: '33 cm', source: 'Drop Jump · CMJ · Abalakov' },
         ],
         metrics: [
           { label: 'Grasa corporal', value: 21, unit: '%', level: 'good', levelLabel: 'Optimo', range: '18-23 %' },
@@ -198,10 +198,10 @@ export const athletes: Athlete[] = [
         date: '2026-06-05',
         score: 79,
         radar: [
-          { key: 'strength', label: 'Fuerza maxima', shortLabel: 'Fuerza', score: 84, team: 70, raw: '101 kg', source: 'Sentadilla 1RM' },
+          { key: 'strength', label: 'Fuerza', shortLabel: 'Fuerza', score: 84, team: 70, raw: '101 kg', source: 'Press banca 1RM' },
           { key: 'speed', label: 'Velocidad punta', shortLabel: 'Velocidad', score: 83, team: 68, raw: '29.2 km/h', source: 'Sprint 10 m' },
-          { key: 'endurance', label: 'Resistencia', shortLabel: 'Resistencia', score: 64, team: 66, raw: '53 ml/kg', source: 'VO2max' },
-          { key: 'jump', label: 'Altura de salto', shortLabel: 'Salto', score: 79, team: 61, raw: '45 cm', source: 'CMJ' },
+          { key: 'agility', label: 'Agilidad', shortLabel: 'Agilidad', score: 64, team: 66, raw: '2.7 s', source: 'Test 5-0-5' },
+          { key: 'jump', label: 'Rendimiento · Salto', shortLabel: 'Salto', score: 79, team: 61, raw: '45 cm', source: 'Drop Jump · CMJ · Abalakov' },
         ],
         metrics: [
           { label: 'Grasa corporal', value: 12, unit: '%', level: 'elite', levelLabel: 'Atleta', range: '8-13 %' },
@@ -225,10 +225,10 @@ export const emptyAssessment = (date = todayIso()): Assessment => ({
   date,
   score: 0,
   radar: [
-    { key: 'strength', label: 'Fuerza maxima', shortLabel: 'Fuerza', score: 0, team: 70, raw: 'Sin dato', source: 'Sentadilla 1RM' },
+    { key: 'strength', label: 'Fuerza', shortLabel: 'Fuerza', score: 0, team: 70, raw: 'Sin dato', source: 'Press banca 1RM' },
     { key: 'speed', label: 'Velocidad punta', shortLabel: 'Velocidad', score: 0, team: 68, raw: 'Sin dato', source: 'Sprint 10 m' },
-    { key: 'endurance', label: 'Resistencia', shortLabel: 'Resistencia', score: 0, team: 66, raw: 'Sin dato', source: 'VO2max' },
-    { key: 'jump', label: 'Altura de salto', shortLabel: 'Salto', score: 0, team: 61, raw: 'Sin dato', source: 'CMJ' },
+    { key: 'agility', label: 'Agilidad', shortLabel: 'Agilidad', score: 0, team: 66, raw: 'Sin dato', source: 'Test 5-0-5' },
+    { key: 'jump', label: 'Rendimiento · Salto', shortLabel: 'Salto', score: 0, team: 61, raw: 'Sin dato', source: 'Drop Jump · CMJ · Abalakov' },
   ],
   metrics: [
     { label: 'Grasa corporal', value: 0, unit: '%', level: 'warning', levelLabel: 'Sin dato', range: 'Pendiente' },

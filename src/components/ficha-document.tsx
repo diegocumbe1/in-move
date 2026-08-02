@@ -295,11 +295,11 @@ export function FichaDocument({ data, sections }: { data: FichaData; sections?: 
         <>
           <SectionTitle>Rendimiento · Saltos</SectionTitle>
           <div className="grid gap-2 sm:grid-cols-4 lg:grid-cols-5">
-            <Metric label="Squat Jump (cm)" value={val(p.sjCm)} />
+            <Metric label="Drop Jump (cm)" value={val(p.dropJumpCm ?? p.sjCm)} />
             <Metric label="CMJ (cm)" value={val(p.cmjCm)} />
             <Metric label="Abalakov (cm)" value={val(p.abalakovCm)} />
             <Metric label="Salto unilat. I/D (cm)" value={`${val(p.saltoUnilateralIzqCm)} / ${val(p.saltoUnilateralDerCm)}`} />
-            <Metric label="Fuerza máxima (kg)" value={val(p.fuerzaMaximaKg)} />
+            <Metric label="RSI (Dp)" value={val(p.rsi)} />
           </div>
 
           <SectionTitle>Rendimiento · Fuerza (encoder)</SectionTitle>

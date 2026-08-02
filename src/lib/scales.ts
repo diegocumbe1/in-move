@@ -1,6 +1,7 @@
 import type { Level } from '@/styles/tokens';
 import type { Assessment, Athlete, RadarMetric, ScaleMetric } from '@/lib/mock-product';
 import type { Anthropometry, Cardio, Flexibility, Performance, Rom } from '@/lib/ficha';
+import { cmjNorm, cmjScore, sitReachNorm, type Norm } from '@/lib/norms';
 
 /**
  * Escalas de clasificación (semáforo) y cálculos derivados de la ficha.
@@ -14,6 +15,20 @@ export const normalize = (value: number | null | undefined, min: number, max: nu
   value == null ? 0 : clampScore(((value - min) / (max - min)) * 100);
 export const normalizeSpeed = (seconds: number | null | undefined) =>
   seconds == null || seconds <= 0 ? 0 : clampScore(((2.4 - seconds) / (2.4 - 1.5)) * 100);
+/**
+ * Promedio de los saltos disponibles (Drop Jump, CMJ, Abalakov).
+ * Ignora los que no se midieron; si no hay ninguno devuelve null.
+ */
+export const jumpAverage = (values: Array<number | null | undefined>) => {
+  const measured = values.filter((v): v is number => v != null && Number.isFinite(v));
+  return measured.length ? measured.reduce((total, v) => total + v, 0) / measured.length : null;
+};
+/**
+ * Agilidad (test 5-0-5, segundos): menor es mejor.
+ * Escala PROVISIONAL 3.6 s = 0 → 2.2 s = 100 (pendiente de baremo definitivo).
+ */
+export const normalizeAgility = (seconds: number | null | undefined) =>
+  seconds == null || seconds <= 0 ? 0 : clampScore(((3.6 - seconds) / (3.6 - 2.2)) * 100);
 export const kmhFrom10m = (seconds: number | null | undefined) =>
   seconds == null || seconds <= 0 ? null : (10 / seconds) * 3.6;
 export const kmhFromSprint = (meters: number, seconds: number | null | undefined) =>
@@ -115,22 +130,25 @@ export const classifyRestingHr = (value: number | null | undefined) => {
   return { level: 'danger' as Level, label: 'Bajo', range: '> 80 ppm' };
 };
 
-export const classifySitReach = (sex: Athlete['sex'], value: number | null | undefined) => {
-  if (value == null) return noData;
-  const limits = sex === 'M' ? [20, 27, 35] : [23, 30, 38];
-  if (value < limits[0]) return { level: 'danger' as Level, label: 'Bajo', range: `< ${limits[0]} cm` };
-  if (value <= limits[1]) return { level: 'warning' as Level, label: 'Medio', range: `${limits[0]}-${limits[1]} cm` };
-  if (value <= limits[2]) return { level: 'good' as Level, label: 'Optimo', range: `${limits[1]}-${limits[2]} cm` };
-  return { level: 'elite' as Level, label: 'Atleta', range: `> ${limits[2]} cm` };
+/** Banda activa de un baremo como semáforo `{ level, label, range }`. */
+const fromNorm = (norm: Norm) => {
+  const band = norm.activeIndex < 0 ? null : norm.bands[norm.activeIndex];
+  return band ? { level: band.level, label: band.label, range: band.range } : noData;
 };
 
-export const classifyCmj = (value: number | null | undefined) => {
-  if (value == null) return noData;
-  if (value >= 44) return { level: 'elite' as Level, label: 'Atleta', range: '>= 44 cm' };
-  if (value >= 38) return { level: 'good' as Level, label: 'Optimo', range: '38-46 cm' };
-  if (value >= 32) return { level: 'warning' as Level, label: 'Medio', range: '32-38 cm' };
-  return { level: 'danger' as Level, label: 'Bajo', range: '< 32 cm' };
-};
+/** Sit and Reach por edad y sexo (Emilio y Martínez, 2002) — ver `@/lib/norms`. */
+export const classifySitReach = (
+  sex: Athlete['sex'],
+  age: number | null | undefined,
+  value: number | null | undefined,
+) => (value == null ? noData : fromNorm(sitReachNorm(sex, age, value)));
+
+/** CMJ por franja de edad (percentiles P25/P75) — ver `@/lib/norms`. */
+export const classifyCmj = (
+  sex: Athlete['sex'],
+  age: number | null | undefined,
+  value: number | null | undefined,
+) => (value == null ? noData : fromNorm(cmjNorm(sex, age, value)));
 
 export type FichaMeasures = {
   anthropometry?: Anthropometry | null;
@@ -164,13 +182,19 @@ export function buildAssessment(
   const sprintDistance = speed10m != null ? 10 : speed20m != null ? 20 : 30;
   const sprintSeconds = speed10m ?? speed20m ?? speed30m;
   const squat = m.performance?.sentadilla1rmKg ?? null;
+  const bench = m.performance?.pressBanca1rmKg ?? null;
   const vo2 = m.performance?.vo2Ml ?? null;
+  const agility = m.performance?.agilidad505S ?? null;
+  // El eje de salto promedia las tres pruebas de salto disponibles.
+  const jumpAvg = jumpAverage([m.performance?.dropJumpCm ?? m.performance?.sjCm, cmj, m.performance?.abalakovCm]);
+  const agilityLabel = m.performance?.agilidadLabel?.trim() || 'Test 5-0-5';
   const kmh = kmhFromSprint(sprintDistance, sprintSeconds);
+  const age = chronologicalAge(birthDate, assessedOn);
 
   const fatStatus = classifyFat(sex, fat);
   const hrStatus = classifyRestingHr(restingHr);
-  const sitStatus = classifySitReach(sex, sitReach);
-  const cmjStatus = classifyCmj(cmj);
+  const sitStatus = classifySitReach(sex, age, sitReach);
+  const cmjStatus = classifyCmj(sex, age, cmj);
 
   const metrics: ScaleMetric[] = [
     { label: 'Grasa corporal', value: fat ?? 0, unit: '%', level: fatStatus.level, levelLabel: fatStatus.label, range: fatStatus.range },
@@ -180,10 +204,10 @@ export function buildAssessment(
   ];
 
   const radar: RadarMetric[] = [
-    { key: 'strength', label: 'Fuerza maxima', shortLabel: 'Fuerza', score: normalize(squat, 40, 140), team: 70, raw: squat == null ? 'Sin dato' : `${squat} kg`, source: 'Sentadilla 1RM' },
+    { key: 'strength', label: 'Fuerza', shortLabel: 'Fuerza', score: normalize(bench, 20, 120), team: 70, raw: bench == null ? 'Sin dato' : `${bench} kg`, source: 'Press banca 1RM' },
     { key: 'speed', label: 'Velocidad punta', shortLabel: 'Velocidad', score: normalizeSpeed(sprintSeconds == null ? null : sprintSeconds * (10 / sprintDistance)), team: 68, raw: kmh == null ? 'Sin dato' : `${kmh.toFixed(1)} km/h`, source: `Sprint ${sprintDistance} m` },
-    { key: 'endurance', label: 'Resistencia', shortLabel: 'Resistencia', score: normalize(vo2, 30, 65), team: 66, raw: vo2 == null ? 'Sin dato' : `${vo2} ml/kg`, source: 'VO2max' },
-    { key: 'jump', label: 'Altura de salto', shortLabel: 'Salto', score: normalize(cmj, 15, 55), team: 61, raw: cmj == null ? 'Sin dato' : `${cmj} cm`, source: 'CMJ' },
+    { key: 'agility', label: 'Agilidad', shortLabel: 'Agilidad', score: normalizeAgility(agility), team: 66, raw: agility == null ? 'Sin dato' : `${agility} s`, source: agilityLabel },
+    { key: 'jump', label: 'Rendimiento · Salto', shortLabel: 'Salto', score: cmjScore(age, jumpAvg) ?? normalize(jumpAvg, 15, 55), team: 61, raw: jumpAvg == null ? 'Sin dato' : `${jumpAvg.toFixed(1)} cm (prom.)`, source: 'Drop Jump · CMJ · Abalakov' },
   ];
 
   return {
@@ -196,7 +220,7 @@ export function buildAssessment(
       weight,
       height,
       bmi: imc,
-      chronologicalAge: chronologicalAge(birthDate, assessedOn),
+      chronologicalAge: age,
       biologicalAge: biologicalAge(sex, birthDate, assessedOn, height, sittingHeight, weight),
       speed10m,
       squat1rm: squat,

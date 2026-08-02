@@ -51,13 +51,13 @@ export type AssessmentDraftInput = {
   sitReach: string; // resultado cm
   flexObs: string;
   // Rendimiento — saltos
-  sj: string;
+  dropJump: string;
   cmj: string;
   abalakov: string;
   saltoUniDer: string;
   saltoUniIzq: string;
   // Rendimiento — fuerza con encoder lineal (CSV: Carga, Vm, Potencia, 1RM, % 1RM)
-  fuerzaMax: string;
+  rsi: string;
   squatLoad: string;
   squat1rm: string;
   squatVm: string;
@@ -88,8 +88,8 @@ export const emptyDraft: AssessmentDraftInput = {
   hombFlexIzq: '', hombFlexDer: '', caderaIzq: '', caderaDer: '', rodillaIzq: '', rodillaDer: '',
   otraLabel: '', otraValor: '',
   pruebaAplicada: '', sitReach: '', flexObs: '',
-  sj: '', cmj: '', abalakov: '', saltoUniDer: '', saltoUniIzq: '',
-  fuerzaMax: '',
+  dropJump: '', cmj: '', abalakov: '', saltoUniDer: '', saltoUniIzq: '',
+  rsi: '',
   squatLoad: '', squat1rm: '', squatVm: '', squatPower: '', pct1rm: '',
   bancaLoad: '', banca1rm: '', bancaVm: '', bancaPower: '', bancaPct1rm: '',
   speed10m: '', speed20m: '', speed30m: '', agilityLabel: '', agilidad505: '', vo2: '',

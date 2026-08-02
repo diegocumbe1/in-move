@@ -8,7 +8,8 @@ import type { FichaData } from '@/components/ficha-document';
 /** Carga los datos de una ficha por id de valoración (uso público, sin sesión). */
 export async function getFichaData(assessmentId: string): Promise<FichaData | null> {
   const [row] = await db.select().from(assessments).where(eq(assessments.id, assessmentId)).limit(1);
-  if (!row) return null;
+  // Las fichas eliminadas (borrado lógico) dejan de ser públicas.
+  if (!row || row.deletedAt) return null;
   const [ath] = await db.select().from(athletes).where(eq(athletes.id, row.athleteId)).limit(1);
   if (!ath) return null;
 

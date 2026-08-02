@@ -4,6 +4,7 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Activity,
+  AlertTriangle,
   BarChart3,
   CalendarDays,
   Camera,
@@ -29,6 +30,7 @@ import {
   Search,
   Settings,
   ShieldCheck,
+  Trash2,
   TrendingUp,
   Upload,
   UserRound,
@@ -55,6 +57,8 @@ import * as api from '@/lib/actions';
 import { uploadAthletePhoto } from '@/lib/upload';
 import { createClient as createSupabaseClient } from '@/lib/supabase/client';
 import type { AssessmentDraftInput } from '@/lib/form-types';
+import { classifyCmj, classifySitReach, jumpAverage } from '@/lib/scales';
+import { cmjScore } from '@/lib/norms';
 import { FICHA_SECTION_KEYS, FICHA_SECTION_LABELS, sectionsForCategory, type CatalogKind, type FichaSectionsConfig, type FichaSectionKey, type FichaTheme } from '@/lib/ficha';
 
 const viewItems: Array<{ id: ViewId; label: string; icon: typeof UsersRound }> = [
@@ -112,6 +116,9 @@ const toNumber = (value: string) => {
 const clampScore = (value: number) => Math.max(0, Math.min(100, Math.round(value)));
 const normalize = (value: number | null, min: number, max: number) =>
   value == null ? 0 : clampScore(((value - min) / (max - min)) * 100);
+// Agilidad (test 5-0-5, s): menor es mejor. Escala provisional 3.6 s = 0 → 2.2 s = 100.
+const normalizeAgility = (seconds: number | null) =>
+  seconds == null || seconds <= 0 ? 0 : clampScore(((3.6 - seconds) / (3.6 - 2.2)) * 100);
 const normalizeSpeed = (seconds: number | null) =>
   seconds == null || seconds <= 0 ? 0 : clampScore(((2.4 - seconds) / (2.4 - 1.5)) * 100);
 const kmhFromSprint = (meters: number, seconds: number | null) =>
@@ -194,22 +201,8 @@ const classifyRestingHr = (value: number | null) => {
   return { level: 'danger' as Level, label: 'Bajo', range: '> 80 ppm' };
 };
 
-const classifySitReach = (sex: Athlete['sex'], value: number | null) => {
-  if (value == null) return { level: 'warning' as Level, label: 'Sin dato', range: 'Pendiente' };
-  const limits = sex === 'M' ? [20, 27, 35] : [23, 30, 38];
-  if (value < limits[0]) return { level: 'danger' as Level, label: 'Bajo', range: `< ${limits[0]} cm` };
-  if (value <= limits[1]) return { level: 'warning' as Level, label: 'Medio', range: `${limits[0]}-${limits[1]} cm` };
-  if (value <= limits[2]) return { level: 'good' as Level, label: 'Optimo', range: `${limits[1]}-${limits[2]} cm` };
-  return { level: 'elite' as Level, label: 'Atleta', range: `> ${limits[2]} cm` };
-};
-
-const classifyCmj = (value: number | null) => {
-  if (value == null) return { level: 'warning' as Level, label: 'Sin dato', range: 'Pendiente' };
-  if (value >= 44) return { level: 'elite' as Level, label: 'Atleta', range: '>= 44 cm' };
-  if (value >= 38) return { level: 'good' as Level, label: 'Optimo', range: '38-46 cm' };
-  if (value >= 32) return { level: 'warning' as Level, label: 'Medio', range: '32-38 cm' };
-  return { level: 'danger' as Level, label: 'Bajo', range: '< 32 cm' };
-};
+// Sit and Reach y CMJ usan baremos por edad/sexo: se importan de `@/lib/scales`
+// para que el preview del admin y la ficha pública no se desalineen.
 
 export default function MockMvpApp() {
   const router = useRouter();
@@ -229,6 +222,12 @@ export default function MockMvpApp() {
   const [editOpen, setEditOpen] = useState(false);
   const [fichaTheme, setFichaThemeState] = useState<FichaTheme>('light');
   const [fichaSectionsByCategory, setFichaSectionsByCategory] = useState<FichaSectionsConfig>({});
+  const [platformTheme, setPlatformTheme] = useState<FichaTheme>('dark');
+
+  // Tema de la plataforma (panel admin): preferencia por dispositivo en localStorage.
+  useEffect(() => {
+    setPlatformTheme(document.documentElement.dataset.theme === 'light' ? 'light' : 'dark');
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -319,6 +318,17 @@ export default function MockMvpApp() {
     await api.setFichaTheme(theme);
   }
 
+  function changePlatformTheme(theme: FichaTheme) {
+    setPlatformTheme(theme);
+    if (theme === 'light') document.documentElement.dataset.theme = 'light';
+    else delete document.documentElement.dataset.theme;
+    try {
+      localStorage.setItem('inmove-theme', theme);
+    } catch {
+      /* almacenamiento no disponible: el tema aplica solo en esta sesión */
+    }
+  }
+
   async function changeFichaSections(categoryName: string, sections: FichaSectionKey[]) {
     setFichaSectionsByCategory((current) => ({ ...current, [categoryName]: sections }));
     await api.setFichaSectionsForCategory(categoryName, sections);
@@ -375,6 +385,14 @@ export default function MockMvpApp() {
     setFormAssessment(assessment);
     setPublicPreview(false);
     setView('assessment');
+  }
+  /** Borrado lógico con justificación: la ficha se conserva en BD para auditoría. */
+  async function deleteFicha(assessment: Assessment, reason: string) {
+    if (!assessment.id) return;
+    await api.deleteAssessment(assessment.id, reason);
+    // Si la ficha eliminada estaba abierta en el formulario, se descarta.
+    if (formAssessment?.id === assessment.id) setFormAssessment(null);
+    await reload();
   }
 
   function updateAthletePhoto(athleteId: string, photoUrl: string) {
@@ -536,6 +554,7 @@ export default function MockMvpApp() {
                     onEditInfo={() => setEditOpen(true)}
                     onNewFicha={() => startNewFicha(detailAthlete)}
                     onEditFicha={(assessment) => editFicha(detailAthlete, assessment)}
+                    onDeleteFicha={deleteFicha}
                   />
                 ) : (
                   <AthletesTable
@@ -575,6 +594,8 @@ export default function MockMvpApp() {
                   onReload={reload}
                   fichaTheme={fichaTheme}
                   onFichaTheme={changeFichaTheme}
+                  platformTheme={platformTheme}
+                  onPlatformTheme={changePlatformTheme}
                   fichaSectionsByCategory={fichaSectionsByCategory}
                   onFichaSections={changeFichaSections}
                   sampleFichaId={mockAthletes.find((a) => a.assessments.some((s) => s.id))?.assessments.find((s) => s.id)?.id}
@@ -885,6 +906,7 @@ function AthleteDetailView({
   onEditInfo,
   onNewFicha,
   onEditFicha,
+  onDeleteFicha,
 }: {
   athlete: Athlete;
   isAdmin: boolean;
@@ -893,10 +915,12 @@ function AthleteDetailView({
   onEditInfo: () => void;
   onNewFicha: () => void;
   onEditFicha: (assessment: Assessment) => void;
+  onDeleteFicha: (assessment: Assessment, reason: string) => Promise<void>;
 }) {
   const fichas = athlete.assessments.filter((a) => a.id);
   const latest = fichas[0];
   const [zoom, setZoom] = useState(false);
+  const [fichaToDelete, setFichaToDelete] = useState<Assessment | null>(null);
   const w = latest?.profile?.weight;
   const h = latest?.profile?.height;
   const imc = latest?.raw?.anthropometry?.imc ?? null;
@@ -1023,10 +1047,22 @@ function AthleteDetailView({
                     Ver
                   </Button>
                   {isAdmin ? (
-                    <Button size="sm" variant="outline" onClick={() => onEditFicha(ficha)}>
-                      <Pencil />
-                      Editar
-                    </Button>
+                    <>
+                      <Button size="sm" variant="outline" onClick={() => onEditFicha(ficha)}>
+                        <Pencil />
+                        Editar
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-level-danger hover:border-level-danger/50 hover:bg-level-danger/10"
+                        onClick={() => setFichaToDelete(ficha)}
+                        aria-label={`Eliminar ficha del ${formatDate(ficha.date)}`}
+                      >
+                        <Trash2 />
+                        Eliminar
+                      </Button>
+                    </>
                   ) : null}
                 </div>
               </div>
@@ -1034,6 +1070,18 @@ function AthleteDetailView({
           </div>
         )}
       </section>
+
+      {fichaToDelete ? (
+        <DeleteFichaModal
+          ficha={fichaToDelete}
+          athleteName={athlete.name}
+          onClose={() => setFichaToDelete(null)}
+          onConfirm={async (reason) => {
+            await onDeleteFicha(fichaToDelete, reason);
+            setFichaToDelete(null);
+          }}
+        />
+      ) : null}
 
       {zoom && athlete.photoUrl ? (
         <div
@@ -1052,6 +1100,162 @@ function AthleteDetailView({
           </button>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+const deleteReasonPresets = [
+  'Ficha creada por error',
+  'Datos mal digitados',
+  'Ficha duplicada',
+  'Valoración no realizada',
+];
+
+/**
+ * Confirma la eliminación de una ficha exigiendo una justificación (mínimo 5
+ * caracteres). El motivo queda guardado en BD junto con la fecha de borrado.
+ */
+function DeleteFichaModal({
+  ficha,
+  athleteName,
+  onClose,
+  onConfirm,
+}: {
+  ficha: Assessment;
+  athleteName: string;
+  onClose: () => void;
+  onConfirm: (reason: string) => Promise<void>;
+}) {
+  // Paso 1: motivo. Paso 2: confirmación final antes de borrar.
+  const [step, setStep] = useState<'reason' | 'confirm'>('reason');
+  const [reason, setReason] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const canDelete = reason.trim().length >= 5;
+
+  async function submit() {
+    if (!canDelete || submitting) return;
+    setSubmitting(true);
+    setError('');
+    try {
+      await onConfirm(reason.trim());
+    } catch (err) {
+      console.error(err);
+      setError('No se pudo eliminar la ficha. Revisa la conexión e intenta de nuevo.');
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 px-4 py-6">
+      <section className="surface-2 w-full max-w-lg rounded-lg p-5 shadow-float md:p-6" role="dialog" aria-modal="true">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-level-danger">
+              {step === 'reason' ? 'Eliminar ficha · Paso 1 de 2' : 'Confirmar eliminación · Paso 2 de 2'}
+            </p>
+            <h2 className="mt-1 text-xl font-semibold">
+              {formatDate(ficha.date)} · {athleteName}
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {step === 'reason'
+                ? 'La ficha dejará de aparecer en el histórico y su enlace público quedará inhabilitado. Se conserva en la base de datos junto con esta justificación.'
+                : 'Revisa los datos antes de continuar. Esta acción no se puede deshacer desde la app.'}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={submitting}
+            className="grid size-11 shrink-0 place-items-center rounded-md border border-border text-muted-foreground disabled:opacity-50"
+            aria-label="Cerrar"
+          >
+            <X className="size-5" />
+          </button>
+        </div>
+
+        {step === 'reason' ? (
+          <>
+            <div className="mt-5 flex flex-wrap gap-2">
+              {deleteReasonPresets.map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => setReason(preset)}
+                  className={`rounded-[999px] border px-3 py-2 text-xs font-semibold transition ${
+                    reason === preset
+                      ? 'border-brand bg-brand/10 text-brand'
+                      : 'border-border text-muted-foreground hover:border-brand/40 hover:text-foreground'
+                  }`}
+                >
+                  {preset}
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-4">
+              <FormField label="Justificación (obligatoria)">
+                <textarea
+                  value={reason}
+                  onChange={(event) => setReason(event.target.value)}
+                  rows={3}
+                  autoFocus
+                  placeholder="Ej. Ficha creada por error, se repitió el registro del 30 de julio."
+                  className="field-control h-auto py-3"
+                />
+              </FormField>
+              <p className="mt-2 text-xs text-muted-foreground">Mínimo 5 caracteres.</p>
+            </div>
+
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <Button variant="outline" onClick={onClose}>
+                Cancelar
+              </Button>
+              <Button variant="destructive" onClick={() => setStep('confirm')} disabled={!canDelete}>
+                <Trash2 />
+                Continuar
+              </Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="mt-5 flex gap-3 rounded-md border border-level-danger/40 bg-level-danger/10 p-4">
+              <AlertTriangle className="size-5 shrink-0 text-level-danger" />
+              <p className="text-sm font-semibold text-foreground">
+                ¿Seguro que quieres eliminar la ficha del {formatDate(ficha.date)} de {athleteName}?
+              </p>
+            </div>
+
+            <dl className="mt-4 grid gap-2 rounded-md border border-border bg-background/35 p-4 text-sm">
+              <div className="flex justify-between gap-3">
+                <dt className="text-muted-foreground">Fecha</dt>
+                <dd className="font-semibold">{formatDate(ficha.date)}</dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-muted-foreground">Score</dt>
+                <dd className="font-semibold">{ficha.score}/100</dd>
+              </div>
+              <div className="gap-3">
+                <dt className="text-muted-foreground">Justificación</dt>
+                <dd className="mt-1 whitespace-pre-wrap font-semibold">{reason.trim()}</dd>
+              </div>
+            </dl>
+
+            {error ? <p className="mt-3 text-xs font-semibold text-level-danger">{error}</p> : null}
+
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <Button variant="outline" onClick={() => setStep('reason')} disabled={submitting}>
+                <ChevronLeft />
+                Volver
+              </Button>
+              <Button variant="destructive" onClick={submit} disabled={submitting}>
+                <Trash2 />
+                {submitting ? 'Eliminando…' : 'Sí, eliminar ficha'}
+              </Button>
+            </div>
+          </>
+        )}
+      </section>
     </div>
   );
 }
@@ -1095,9 +1299,10 @@ function AssessmentView({
       rodillaIzq: s(r.rodillaFlexionIzq), rodillaDer: s(r.rodillaFlexionDer),
       otraLabel: s(r.otraLabel), otraValor: s(r.otraValor),
       pruebaAplicada: s(f.pruebaAplicada), sitReach: s(f.resultadoCm), flexObs: s(f.observacion),
-      sj: s(p.sjCm), cmj: s(p.cmjCm), abalakov: s(p.abalakovCm),
+      // Fichas antiguas guardaron el salto como sjCm (Squat Jump).
+      dropJump: s(p.dropJumpCm ?? p.sjCm), cmj: s(p.cmjCm), abalakov: s(p.abalakovCm),
       saltoUniDer: s(p.saltoUnilateralDerCm), saltoUniIzq: s(p.saltoUnilateralIzqCm),
-      fuerzaMax: s(p.fuerzaMaximaKg),
+      rsi: s(p.rsi),
       squatLoad: s(p.sentadillaCargaKg),
       squat1rm: s(p.sentadilla1rmKg),
       squatVm: s(p.sentadillaVelocidadMediaMs),
@@ -1178,14 +1383,18 @@ function AssessmentView({
   const sprintDistanceM = Number(selectedSprintConfig.value);
   const sprintValue = toNumber(draft[selectedSprintConfig.key]);
   const squatValue = toNumber(draft.squat1rm);
+  const benchValue = toNumber(draft.banca1rm);
   const vo2Value = toNumber(draft.vo2);
+  const agilityValue = toNumber(draft.agilidad505);
   const kmh = kmhFromSprint(sprintDistanceM, sprintValue);
   const age = chronologicalAge(athlete.birthDate, assessment.date);
   const bioAge = biologicalAge(athlete.sex, athlete.birthDate, assessment.date, heightValue, sittingHeightValue, weightValue);
   const fatStatus = classifyFat(athlete.sex, fatValue);
   const hrStatus = classifyRestingHr(restingHrValue);
-  const sitReachStatus = classifySitReach(athlete.sex, sitReachValue);
-  const cmjStatus = classifyCmj(cmjValue);
+  const sitReachStatus = classifySitReach(athlete.sex, age, sitReachValue);
+  const cmjStatus = classifyCmj(athlete.sex, age, cmjValue);
+  // Eje "Salto" del radar = promedio de Drop Jump, CMJ y Abalakov medidos.
+  const jumpAvgValue = jumpAverage([toNumber(draft.dropJump), cmjValue, toNumber(draft.abalakov)]);
   const displayMetrics = [
     { label: 'Grasa corporal', value: fatValue ?? 0, unit: '%', level: fatStatus.level, levelLabel: fatStatus.label, range: fatStatus.range },
     { label: 'FC reposo', value: restingHrValue ?? 0, unit: 'ppm', level: hrStatus.level, levelLabel: hrStatus.label, range: hrStatus.range },
@@ -1193,10 +1402,10 @@ function AssessmentView({
     { label: 'CMJ', value: cmjValue ?? 0, unit: 'cm', level: cmjStatus.level, levelLabel: cmjStatus.label, range: cmjStatus.range },
   ];
   const liveRadar: RadarMetric[] = [
-    { key: 'strength', label: 'Fuerza maxima', shortLabel: 'Fuerza', score: normalize(squatValue, 40, 140), team: 70, raw: squatValue == null ? 'Sin dato' : `${squatValue} kg`, source: 'Sentadilla 1RM' },
+    { key: 'strength', label: 'Fuerza', shortLabel: 'Fuerza', score: normalize(benchValue, 20, 120), team: 70, raw: benchValue == null ? 'Sin dato' : `${benchValue} kg`, source: 'Press banca 1RM' },
     { key: 'speed', label: 'Velocidad punta', shortLabel: 'Velocidad', score: normalizeSpeed(sprintValue == null ? null : sprintValue * (10 / sprintDistanceM)), team: 68, raw: kmh == null ? 'Sin dato' : `${kmh.toFixed(1)} km/h`, source: `Sprint ${sprintDistanceM} m` },
-    { key: 'endurance', label: 'Resistencia', shortLabel: 'Resistencia', score: normalize(vo2Value, 30, 65), team: 66, raw: vo2Value == null ? 'Sin dato' : `${vo2Value} ml/kg`, source: 'VO2max' },
-    { key: 'jump', label: 'Altura de salto', shortLabel: 'Salto', score: normalize(cmjValue, 15, 55), team: 61, raw: cmjValue == null ? 'Sin dato' : `${cmjValue} cm`, source: 'CMJ' },
+    { key: 'agility', label: 'Agilidad', shortLabel: 'Agilidad', score: normalizeAgility(agilityValue), team: 66, raw: agilityValue == null ? 'Sin dato' : `${agilityValue} s`, source: draft.agilityLabel.trim() || 'Test 5-0-5' },
+    { key: 'jump', label: 'Rendimiento · Salto', shortLabel: 'Salto', score: cmjScore(age, jumpAvgValue) ?? normalize(jumpAvgValue, 15, 55), team: 61, raw: jumpAvgValue == null ? 'Sin dato' : `${jumpAvgValue.toFixed(1)} cm (prom.)`, source: 'Drop Jump · CMJ · Abalakov' },
   ];
   const liveAssessment: Assessment = {
     date: assessment.date,
@@ -1228,12 +1437,12 @@ function AssessmentView({
       },
       performance: {
         ...(assessment.raw?.performance ?? {}),
-        sjCm: toNumber(draft.sj) ?? undefined,
+        dropJumpCm: toNumber(draft.dropJump) ?? undefined,
         cmjCm: cmjValue ?? undefined,
         abalakovCm: toNumber(draft.abalakov) ?? undefined,
         saltoUnilateralDerCm: toNumber(draft.saltoUniDer) ?? undefined,
         saltoUnilateralIzqCm: toNumber(draft.saltoUniIzq) ?? undefined,
-        fuerzaMaximaKg: toNumber(draft.fuerzaMax) ?? undefined,
+        rsi: toNumber(draft.rsi) ?? undefined,
         sentadillaCargaKg: toNumber(draft.squatLoad) ?? undefined,
         sentadillaVelocidadMediaMs: toNumber(draft.squatVm) ?? undefined,
         sentadillaPotenciaW: toNumber(draft.squatPower) ?? undefined,
@@ -1415,7 +1624,8 @@ function AssessmentView({
 
         <h3 className="mt-8 mb-3 text-sm font-bold uppercase tracking-wide text-brand">Rendimiento · Fuerza y potencia</h3>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {F('Squat Jump (cm)', 'sj')}
+          {F('Drop Jump (cm)', 'dropJump')}
+          {F('RSI (Drop Jump)', 'rsi')}
           {F('Abalakov (cm)', 'abalakov')}
           {F('Salto unilateral DER (cm)', 'saltoUniDer')}
           {F('Salto unilateral IZQ (cm)', 'saltoUniIzq')}
@@ -1620,7 +1830,7 @@ function PublicAssessmentView({
   const fatMetric = assessment.metrics.find((metric) => metric.label === 'Grasa corporal');
   const speedMetric = assessment.radar.find((metric) => metric.key === 'speed');
   const strengthMetric = assessment.radar.find((metric) => metric.key === 'strength');
-  const enduranceMetric = assessment.radar.find((metric) => metric.key === 'endurance');
+  const agilityMetric = assessment.radar.find((metric) => metric.key === 'agility');
   return (
     <div className="mx-auto grid max-w-6xl gap-5">
       <section className="surface-1 rounded-lg p-5 md:p-6">
@@ -1657,7 +1867,7 @@ function PublicAssessmentView({
         <ReportDataCard title="Rendimiento base" rows={[
           { label: 'Fuerza', value: strengthMetric?.raw ?? '—' },
           { label: 'Velocidad', value: speedMetric?.raw ?? '—' },
-          { label: 'Resistencia', value: enduranceMetric?.raw ?? '—' },
+          { label: 'Agilidad', value: agilityMetric?.raw ?? '—' },
         ]} />
         <ReportDataCard title="Contexto deportivo" rows={[
           { label: 'Sexo', value: athlete.sex === 'M' ? 'Masculino' : 'Femenino' },
@@ -2430,6 +2640,8 @@ function SettingsView({
   onReload,
   fichaTheme,
   onFichaTheme,
+  platformTheme,
+  onPlatformTheme,
   fichaSectionsByCategory,
   onFichaSections,
   sampleFichaId,
@@ -2438,12 +2650,36 @@ function SettingsView({
   onReload: () => Promise<void>;
   fichaTheme: FichaTheme;
   onFichaTheme: (theme: FichaTheme) => Promise<void>;
+  platformTheme: FichaTheme;
+  onPlatformTheme: (theme: FichaTheme) => void;
   fichaSectionsByCategory: FichaSectionsConfig;
   onFichaSections: (category: string, sections: FichaSectionKey[]) => Promise<void>;
   sampleFichaId?: string;
 }) {
   return (
     <div className="grid gap-5">
+      <section className="surface-1 rounded-lg p-4 md:p-5">
+        <SectionHeader eyebrow="Apariencia" title="Tema de la plataforma" />
+        <p className="-mt-2 mb-4 text-sm text-muted-foreground">
+          Cambia cómo se ve este panel de administración en tu pantalla: claro u oscuro.
+          Es una preferencia de este dispositivo (no afecta la ficha del deportista).
+        </p>
+        <div className="inline-flex rounded-md border border-border bg-background p-1">
+          {(['light', 'dark'] as const).map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => onPlatformTheme(t)}
+              className={`h-10 rounded-sm px-4 text-sm font-semibold transition ${
+                platformTheme === t ? 'bg-brand text-brand-foreground' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {t === 'light' ? 'Clara' : 'Oscura'}
+            </button>
+          ))}
+        </div>
+      </section>
+
       <section className="surface-1 rounded-lg p-4 md:p-5">
         <SectionHeader eyebrow="Apariencia" title="Tema de la ficha" />
         <p className="-mt-2 mb-4 text-sm text-muted-foreground">

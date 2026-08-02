@@ -1,23 +1,41 @@
 import type { Level } from '@/styles/tokens';
 import type { Anthropometry, Cardio, Flexibility, Performance } from '@/lib/ficha';
-import { normalize, normalizeSpeed } from '@/lib/scales';
+import { jumpAverage, normalize, normalizeAgility, normalizeSpeed } from '@/lib/scales';
+import { cmjNorm, cmjScore, sitReachNorm, type Band, type Norm, type Sex } from '@/lib/norms';
 
 /**
  * Escalas de comparación (semáforo) por indicador — FICHA_CAMPOS.md.
  * Genera, para cada medida clasificable, la banda en la que cae el atleta
  * (bajo/medio/óptimo/atleta) con su rango de referencia.
+ * CMJ y Sit and Reach usan baremos por edad y sexo definidos en `@/lib/norms`.
  */
 
-export type Band = { label: string; range: string; level: Level; active: boolean };
+export type { Band, Sex };
 export type IndicatorComparison = {
   key: string;
   title: string;
   valueLabel: string;
   status: { level: Level; label: string } | null;
   bands: Band[];
+  /** Franja de edad y cita del baremo aplicado (sólo indicadores normativos). */
+  reference?: string;
+  /** Advertencia sobre el baremo (extrapolación por edad, baremo pendiente…). */
+  note?: string;
 };
 
-type Sex = 'M' | 'F';
+/** Empaqueta un baremo de `norms.ts` como tarjeta de comparación. */
+const fromNorm = (key: string, title: string, valueLabel: string, norm: Norm): IndicatorComparison => {
+  const active = norm.activeIndex < 0 ? null : norm.bands[norm.activeIndex];
+  return {
+    key,
+    title,
+    valueLabel,
+    status: active ? { level: active.level, label: active.label } : null,
+    bands: norm.bands,
+    reference: norm.reference,
+    note: norm.note,
+  };
+};
 
 const mk = (defs: Omit<Band, 'active'>[], activeIndex: number): Band[] =>
   defs.map((b, i) => ({ ...b, active: i === activeIndex }));
@@ -98,23 +116,8 @@ function hrComparison(v: number | null | undefined): IndicatorComparison {
   };
 }
 
-function sitReachComparison(sex: Sex, v: number | null | undefined): IndicatorComparison {
-  const t = sex === 'M' ? [20, 27, 35] : [23, 30, 38];
-  const defs: Omit<Band, 'active'>[] = [
-    { label: 'Bajo', range: `< ${t[0]} cm`, level: 'danger' },
-    { label: 'Promedio', range: `${t[0]} – ${t[1]} cm`, level: 'warning' },
-    { label: 'Bueno', range: `${t[1] + 1} – ${t[2]} cm`, level: 'good' },
-    { label: 'Excelente', range: `> ${t[2]} cm`, level: 'elite' },
-  ];
-  let idx = -1;
-  if (v != null) idx = v < t[0] ? 0 : v <= t[1] ? 1 : v <= t[2] ? 2 : 3;
-  return {
-    key: 'sitReach',
-    title: 'Sit and Reach',
-    valueLabel: v == null ? '—' : `${v} cm`,
-    status: idx < 0 ? null : { level: defs[idx].level, label: defs[idx].label },
-    bands: mk(defs, idx),
-  };
+function sitReachComparison(sex: Sex, age: number | null, v: number | null | undefined): IndicatorComparison {
+  return fromNorm('sitReach', 'Sit and Reach', v == null ? '—' : `${v} cm`, sitReachNorm(sex, age, v));
 }
 
 function bmiComparison(v: number | null | undefined): IndicatorComparison {
@@ -135,22 +138,8 @@ function bmiComparison(v: number | null | undefined): IndicatorComparison {
   };
 }
 
-function cmjComparison(v: number | null | undefined): IndicatorComparison {
-  const defs: Omit<Band, 'active'>[] = [
-    { label: 'Bajo', range: '< 32 cm', level: 'danger' },
-    { label: 'Medio', range: '32 – 38 cm', level: 'warning' },
-    { label: 'Óptimo', range: '38 – 44 cm', level: 'good' },
-    { label: 'Atleta', range: '≥ 44 cm', level: 'elite' },
-  ];
-  let idx = -1;
-  if (v != null) idx = v < 32 ? 0 : v < 38 ? 1 : v < 44 ? 2 : 3;
-  return {
-    key: 'cmj',
-    title: 'Salto CMJ',
-    valueLabel: v == null ? '—' : `${v} cm`,
-    status: idx < 0 ? null : { level: defs[idx].level, label: defs[idx].label },
-    bands: mk(defs, idx),
-  };
+function cmjComparison(sex: Sex, age: number | null, v: number | null | undefined): IndicatorComparison {
+  return fromNorm('cmj', 'Salto CMJ', v == null ? '—' : `${v} cm`, cmjNorm(sex, age, v));
 }
 
 export type ComparisonMeasures = {
@@ -163,31 +152,34 @@ export type ComparisonMeasures = {
 export type RadarAxis = { label: string; score: number; raw: string };
 
 /** Ejes del radar de perfil de rendimiento (0–100). */
-export function buildRadar(m: ComparisonMeasures): RadarAxis[] {
+export function buildRadar(m: ComparisonMeasures, age: number | null = null): RadarAxis[] {
   const p = m.performance ?? {};
-  const squat = p.sentadilla1rmKg ?? p.fuerzaMaximaKg;
+  const bench = p.pressBanca1rmKg;
   const speed10m = p.velocidad10mS;
   const speed20m = p.velocidad20mS;
   const speed30m = p.velocidad30mS;
   const sprintDistance = speed10m != null ? 10 : speed20m != null ? 20 : 30;
   const speed = speed10m ?? speed20m ?? speed30m;
-  const vo2 = p.vo2Ml;
+  const agility = p.agilidad505S;
   const cmj = p.cmjCm;
+  // El eje de salto promedia las tres pruebas de salto disponibles.
+  const jumpAvg = jumpAverage([p.dropJumpCm ?? p.sjCm, cmj, p.abalakovCm]);
   return [
-    { label: 'Fuerza', score: normalize(squat, 40, 140), raw: squat == null ? '—' : `${squat} kg` },
+    { label: 'Fuerza', score: normalize(bench, 20, 120), raw: bench == null ? '—' : `${bench} kg` },
     { label: 'Velocidad', score: normalizeSpeed(speed == null ? null : speed * (10 / sprintDistance)), raw: speed == null ? '—' : `${speed} s (${sprintDistance} m)` },
-    { label: 'Resistencia', score: normalize(vo2, 30, 65), raw: vo2 == null ? '—' : `${vo2} ml/kg` },
-    { label: 'Salto', score: normalize(cmj, 15, 55), raw: cmj == null ? '—' : `${cmj} cm` },
+    { label: 'Agilidad', score: normalizeAgility(agility), raw: agility == null ? '—' : `${agility} s` },
+    // El salto se puntúa contra el baremo CMJ de su edad; sin edad, escala genérica.
+    { label: 'Rendimiento · Salto', score: cmjScore(age, jumpAvg) ?? normalize(jumpAvg, 15, 55), raw: jumpAvg == null ? '—' : `${jumpAvg.toFixed(1)} cm (prom.)` },
   ];
 }
 
-export function buildComparison(sex: Sex, m: ComparisonMeasures): IndicatorComparison[] {
+export function buildComparison(sex: Sex, age: number | null, m: ComparisonMeasures): IndicatorComparison[] {
   return [
     bmiComparison(m.anthropometry?.imc),
     fatComparison(sex, m.anthropometry?.pctGrasa),
     masaComparison(sex, m.anthropometry?.pctMasa),
     hrComparison(m.cardio?.fcReposo),
-    sitReachComparison(sex, m.flexibility?.resultadoCm),
-    cmjComparison(m.performance?.cmjCm),
+    sitReachComparison(sex, age, m.flexibility?.resultadoCm),
+    cmjComparison(sex, age, m.performance?.cmjCm),
   ];
 }

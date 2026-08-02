@@ -34,6 +34,7 @@ function IndicatorCard({ item }: { item: IndicatorComparison }) {
       </div>
 
       {/* Gauge: zonas de color con marcador ▲ en la zona del deportista */}
+      {n > 0 ? (
       <div className="mt-4">
         <div className="flex gap-0.5">
           {item.bands.map((band) => (
@@ -59,6 +60,14 @@ function IndicatorCard({ item }: { item: IndicatorComparison }) {
           ))}
         </div>
       </div>
+      ) : null}
+
+      {item.reference ? (
+        <p className="mt-2 text-[9px] leading-tight text-[var(--fc-muted)]">Referencia: {item.reference}</p>
+      ) : null}
+      {item.note ? (
+        <p className="mt-1 text-[9px] font-semibold leading-tight text-amber-600">{item.note}</p>
+      ) : null}
     </div>
   );
 }
@@ -78,7 +87,7 @@ export function FichaComparison({
       <div className="rounded-2xl border-2 border-green-600 bg-[var(--fc-card)] p-5 md:p-7">
         <div className="rounded-lg bg-green-700 px-5 py-3 text-center">
           <h2 className="text-base font-extrabold uppercase tracking-wide text-white md:text-lg">Comparación por rangos</h2>
-          <p className="mt-0.5 text-xs text-green-100">Dónde te ubicas en cada indicador</p>
+          <p className="mt-0.5 text-xs text-green-100">Dónde te ubicas en cada indicador · rangos ajustados a edad y sexo</p>
         </div>
 
         {hasRadar ? (
@@ -103,10 +112,11 @@ export function FichaComparison({
           ))}
         </div>
         <p className="mt-5 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-[var(--fc-muted)]">
-          <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-full bg-red-500" /> Bajo</span>
-          <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-full bg-amber-500" /> Medio</span>
-          <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-full bg-green-600" /> Óptimo</span>
-          <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-full bg-sky-500" /> Atleta</span>
+          {/* Cada indicador usa las etiquetas de su propia fuente; la leyenda describe el nivel. */}
+          <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-full bg-red-500" /> Por debajo</span>
+          <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-full bg-amber-500" /> Intermedio</span>
+          <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-full bg-green-600" /> Adecuado</span>
+          <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-full bg-sky-500" /> Destacado</span>
         </p>
       </div>
     </div>
