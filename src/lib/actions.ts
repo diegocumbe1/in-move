@@ -4,11 +4,22 @@ import { and, desc, eq, isNull } from 'drizzle-orm';
 import { db } from '@/db';
 import { athletes, assessments, catalogItems, appSettings } from '@/db/schema';
 import { buildAssessment, deriveStatus } from '@/lib/scales';
-import { emptyAssessment, generateCode, todayIso } from '@/lib/mock-product';
+import { emptyAssessment, generateCode } from '@/lib/mock-product';
+import { isFutureIso, isValidIsoDate, todayIso } from '@/lib/date';
 import type { Athlete, ProductSettings } from '@/lib/mock-product';
 import type { NewAthleteInput, AssessmentDraftInput } from '@/lib/form-types';
 import { defaultFichaSections, FICHA_SECTION_KEYS, type CatalogKind, type FichaSectionsConfig, type FichaSectionKey } from '@/lib/ficha';
 import { publicPhotoUrl } from '@/lib/photo';
+
+/**
+ * Fecha de valoración: `yyyy-mm-dd` válido y no futuro (según el calendario de
+ * Bogotá). Cualquier otra cosa cae a hoy en Bogotá.
+ */
+const assessedOnDate = (value: string | undefined): string => {
+  const trimmed = value?.trim();
+  if (!isValidIsoDate(trimmed) || isFutureIso(trimmed)) return todayIso();
+  return trimmed;
+};
 
 const num = (value: string): number | undefined => {
   const trimmed = value?.trim();
@@ -164,6 +175,7 @@ export async function saveAssessment(
   assessmentId?: string,
 ): Promise<string> {
   const values = {
+    assessedOn: assessedOnDate(draft.assessedOn),
     anthropometry: {
       pesoKg: num(draft.weight),
       estaturaCm: num(draft.height),
@@ -238,7 +250,7 @@ export async function saveAssessment(
 
   const [row] = await db
     .insert(assessments)
-    .values({ athleteId, assessedOn: todayIso(), ...values })
+    .values({ athleteId, ...values })
     .returning({ id: assessments.id });
   return row.id;
 }

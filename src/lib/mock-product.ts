@@ -1,3 +1,4 @@
+import { formatDate, todayIso } from '@/lib/date';
 import type { Level } from '@/styles/tokens';
 import type { Anthropometry, Cardio, Rom, Flexibility, Performance } from '@/lib/ficha';
 
@@ -216,7 +217,9 @@ export const athletes: Athlete[] = [
 
 export const groups = ['Todos', 'Running', 'Cofisam'] as const;
 
-export const todayIso = () => new Date().toISOString().slice(0, 10);
+// Fechas ancladas a America/Bogota (ver src/lib/date.ts); se reexportan para no
+// romper los imports existentes.
+export { todayIso, formatDate };
 
 export const generateCode = () =>
   Array.from({ length: 8 }, () => Math.floor(Math.random() * 10)).join('');
@@ -237,11 +240,6 @@ export const emptyAssessment = (date = todayIso()): Assessment => ({
     { label: 'CMJ', value: 0, unit: 'cm', level: 'warning', levelLabel: 'Sin dato', range: 'Pendiente' },
   ],
 });
-
-export const formatDate = (date: string) =>
-  new Intl.DateTimeFormat('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }).format(
-    new Date(`${date}T12:00:00`),
-  );
 
 export const levelLabel: Record<Level, string> = {
   danger: 'Bajo',

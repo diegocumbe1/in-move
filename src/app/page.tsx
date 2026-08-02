@@ -44,12 +44,14 @@ import {
   emptyAssessment,
   formatDate,
   generateCode,
+  todayIso,
   type Assessment,
   type Athlete,
   type ProductSettings,
   type RadarMetric,
   type ViewId,
 } from '@/lib/mock-product';
+import { daysSinceIso, isoToInstant } from '@/lib/date';
 import type { Level } from '@/styles/tokens';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/premium';
@@ -131,8 +133,8 @@ const calcPct1rm = (loadKg: string, oneRmKg: string) => {
 };
 const yearsBetween = (fromDate: string, toDate: string) => {
   if (!fromDate || !toDate) return null;
-  const from = new Date(`${fromDate}T12:00:00`);
-  const to = new Date(`${toDate}T12:00:00`);
+  const from = isoToInstant(fromDate);
+  const to = isoToInstant(toDate);
   if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return null;
   const years = (to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
   return years >= 0 ? years : null;
@@ -921,6 +923,9 @@ function AthleteDetailView({
   const latest = fichas[0];
   const [zoom, setZoom] = useState(false);
   const [fichaToDelete, setFichaToDelete] = useState<Assessment | null>(null);
+  const [newFichaPrompt, setNewFichaPrompt] = useState(false);
+  // Si ya hay fichas, se confirma antes de crear otra (evita duplicados incompletos).
+  const requestNewFicha = () => (latest ? setNewFichaPrompt(true) : onNewFicha());
   const w = latest?.profile?.weight;
   const h = latest?.profile?.height;
   const imc = latest?.raw?.anthropometry?.imc ?? null;
@@ -945,7 +950,7 @@ function AthleteDetailView({
                 <Pencil />
                 Editar información
               </Button>
-              <Button size="sm" onClick={onNewFicha}>
+              <Button size="sm" onClick={requestNewFicha}>
                 <FilePlus />
                 Generar nueva ficha
               </Button>
@@ -1071,6 +1076,22 @@ function AthleteDetailView({
         )}
       </section>
 
+      {newFichaPrompt && latest ? (
+        <NewFichaModal
+          latest={latest}
+          totalFichas={fichas.length}
+          onClose={() => setNewFichaPrompt(false)}
+          onEditLatest={() => {
+            setNewFichaPrompt(false);
+            onEditFicha(latest);
+          }}
+          onCreate={() => {
+            setNewFichaPrompt(false);
+            onNewFicha();
+          }}
+        />
+      ) : null}
+
       {fichaToDelete ? (
         <DeleteFichaModal
           ficha={fichaToDelete}
@@ -1100,6 +1121,84 @@ function AthleteDetailView({
           </button>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * Antes de crear otra ficha se pregunta si en realidad se quiere editar la última.
+ * Evita el caso de varias fichas incompletas con fechas cercanas.
+ */
+function NewFichaModal({
+  latest,
+  totalFichas,
+  onClose,
+  onEditLatest,
+  onCreate,
+}: {
+  latest: Assessment;
+  totalFichas: number;
+  onClose: () => void;
+  onEditLatest: () => void;
+  onCreate: () => void;
+}) {
+  const days = daysSinceIso(latest.date);
+  const isRecent = days != null && days <= 7;
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 px-4 py-6">
+      <section className="surface-2 w-full max-w-lg rounded-lg p-5 shadow-float md:p-6" role="dialog" aria-modal="true">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand">Nueva valoración</p>
+            <h2 className="mt-1 text-xl font-semibold">¿Ficha nueva o editar la actual?</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Este deportista ya tiene {totalFichas} {totalFichas === 1 ? 'ficha' : 'fichas'}. Crear una nueva agrega
+              otra versión al histórico; editar la actual completa la que ya existe.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="grid size-11 shrink-0 place-items-center rounded-md border border-border text-muted-foreground"
+            aria-label="Cerrar"
+          >
+            <X className="size-5" />
+          </button>
+        </div>
+
+        <div className="mt-5 rounded-md border border-border bg-background/35 p-4">
+          <p className="text-sm font-semibold">Última ficha · {formatDate(latest.date)}</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Score {latest.score}/100
+            {days == null ? '' : days === 0 ? ' · registrada hoy' : ` · hace ${days} ${days === 1 ? 'día' : 'días'}`}
+          </p>
+          {isRecent ? (
+            <p className="mt-3 flex gap-2 text-xs font-semibold text-level-warning">
+              <AlertTriangle className="size-4 shrink-0" />
+              Es muy reciente: si la valoración es la misma, edítala en vez de crear otra.
+            </p>
+          ) : null}
+        </div>
+
+        <div className="mt-6 grid gap-2 sm:grid-cols-2">
+          <Button variant="outline" onClick={onEditLatest}>
+            <Pencil />
+            Editar la actual
+          </Button>
+          <Button onClick={onCreate}>
+            <FilePlus />
+            Crear ficha nueva
+          </Button>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="mt-3 w-full text-center text-xs font-semibold text-muted-foreground hover:text-foreground"
+        >
+          Cancelar
+        </button>
+      </section>
     </div>
   );
 }
@@ -1289,6 +1388,7 @@ function AssessmentView({
     const f = assessment.raw?.flexibility ?? {};
     const p = assessment.raw?.performance ?? {};
     return {
+      assessedOn: assessment.date,
       weight: s(a.pesoKg), height: s(a.estaturaCm), sittingHeight: s(a.estaturaSentadoCm), wingspan: s(a.envergaduraCm), imc: s(a.imc), fat: s(a.pctGrasa), masa: s(a.pctMasa),
       restingHr: s(c.fcReposo), fcInicial: s(c.fcInicial), fcFinal: s(c.fcFinal), fcMax: s(c.fcMax),
       colFlex: s(r.columnaFlexion), colExt: s(r.columnaExtension),
@@ -1387,8 +1487,11 @@ function AssessmentView({
   const vo2Value = toNumber(draft.vo2);
   const agilityValue = toNumber(draft.agilidad505);
   const kmh = kmhFromSprint(sprintDistanceM, sprintValue);
-  const age = chronologicalAge(athlete.birthDate, assessment.date);
-  const bioAge = biologicalAge(athlete.sex, athlete.birthDate, assessment.date, heightValue, sittingHeightValue, weightValue);
+  // La fecha del formulario manda: al digitalizar una ficha antigua, las edades
+  // y los baremos se calculan contra la fecha en que se hizo la valoración.
+  const assessedOnValue = draft.assessedOn || assessment.date;
+  const age = chronologicalAge(athlete.birthDate, assessedOnValue);
+  const bioAge = biologicalAge(athlete.sex, athlete.birthDate, assessedOnValue, heightValue, sittingHeightValue, weightValue);
   const fatStatus = classifyFat(athlete.sex, fatValue);
   const hrStatus = classifyRestingHr(restingHrValue);
   const sitReachStatus = classifySitReach(athlete.sex, age, sitReachValue);
@@ -1408,7 +1511,7 @@ function AssessmentView({
     { key: 'jump', label: 'Rendimiento · Salto', shortLabel: 'Salto', score: cmjScore(age, jumpAvgValue) ?? normalize(jumpAvgValue, 15, 55), team: 61, raw: jumpAvgValue == null ? 'Sin dato' : `${jumpAvgValue.toFixed(1)} cm (prom.)`, source: 'Drop Jump · CMJ · Abalakov' },
   ];
   const liveAssessment: Assessment = {
-    date: assessment.date,
+    date: assessedOnValue,
     score: Math.round(liveRadar.reduce((total, metric) => total + metric.score, 0) / liveRadar.length),
     radar: liveRadar,
     metrics: displayMetrics,
@@ -1478,7 +1581,7 @@ function AssessmentView({
             <p className="text-sm font-semibold text-brand">{assessmentId ? 'Editar ficha' : 'Nueva ficha'}</p>
             <h2 className="text-2xl font-semibold">{athlete.name}</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              {athlete.code} · {athlete.group} · {formatDate(assessment.date)}
+              {athlete.code} · {athlete.group} · {formatDate(assessedOnValue)}
             </p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
@@ -1520,6 +1623,19 @@ function AssessmentView({
             ) : null}
           </div>
           <div className="grid gap-4 md:grid-cols-2">
+            <FormField label="Fecha de valoración">
+              <input
+                disabled={!isAdmin}
+                type="date"
+                max={todayIso()}
+                value={draft.assessedOn}
+                onChange={(event) => updateDraft('assessedOn', event.target.value)}
+                className="field-control"
+              />
+              <span className="mt-1 block text-xs text-muted-foreground">
+                Cámbiala para digitalizar una ficha antigua con su fecha real.
+              </span>
+            </FormField>
             <FormField label="Nombre del deportista">
               <input disabled={!isAdmin} defaultValue={athlete.name} className="field-control" />
             </FormField>

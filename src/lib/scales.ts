@@ -2,6 +2,7 @@ import type { Level } from '@/styles/tokens';
 import type { Assessment, Athlete, RadarMetric, ScaleMetric } from '@/lib/mock-product';
 import type { Anthropometry, Cardio, Flexibility, Performance, Rom } from '@/lib/ficha';
 import { cmjNorm, cmjScore, sitReachNorm, type Norm } from '@/lib/norms';
+import { isoToInstant } from '@/lib/date';
 
 /**
  * Escalas de clasificación (semáforo) y cálculos derivados de la ficha.
@@ -36,8 +37,9 @@ export const kmhFromSprint = (meters: number, seconds: number | null | undefined
 
 export const yearsBetween = (fromDate: string, toDate: string) => {
   if (!fromDate || !toDate) return null;
-  const from = new Date(`${fromDate}T12:00:00`);
-  const to = new Date(`${toDate}T12:00:00`);
+  // Mediodía de Bogotá: el mismo día calendario en servidor y en navegador.
+  const from = isoToInstant(fromDate);
+  const to = isoToInstant(toDate);
   if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return null;
   const years = (to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
   return years >= 0 ? years : null;

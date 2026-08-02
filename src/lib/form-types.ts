@@ -18,6 +18,8 @@ export type NewAthleteInput = {
 // Campos crudos (strings) tal como llegan del formulario de valoración completo
 // (FICHA_CAMPOS.md). Todos opcionales: se llenan cuando se miden.
 export type AssessmentDraftInput = {
+  // Fecha de la valoración (yyyy-mm-dd). Editable para digitalizar fichas antiguas.
+  assessedOn: string;
   // Antropometría
   weight: string; // peso kg
   height: string; // estatura cm
@@ -82,6 +84,7 @@ export type AssessmentDraftInput = {
 
 /** Draft vacío con todos los campos en string vacío. */
 export const emptyDraft: AssessmentDraftInput = {
+  assessedOn: '',
   weight: '', height: '', sittingHeight: '', wingspan: '', imc: '', fat: '', masa: '',
   restingHr: '', fcInicial: '', fcFinal: '', fcMax: '',
   colFlex: '', colExt: '', hombRotIntIzq: '', hombRotIntDer: '', hombRotExtIzq: '', hombRotExtDer: '',
