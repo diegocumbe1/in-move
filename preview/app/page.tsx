@@ -104,6 +104,7 @@ export default function FichaPage() {
         </div>
         <div className="spacer" />
         <Link href="/historico" className="pill" style={{ textDecoration: "none", color: "#fff", marginRight: 8 }}>📈 Histórico</Link>
+        <Link href="/metodologia" className="pill" style={{ textDecoration: "none", color: "#fff", marginRight: 8 }}>📖 Metodología</Link>
         <Link href="/ajustes" className="pill" style={{ textDecoration: "none", color: "#fff", marginRight: 8 }}>⚙️ Ajustes</Link>
         <Link href="/perfil" className="pill" style={{ textDecoration: "none", color: "#fff" }}>📊 Perfil</Link>
       </header>
@@ -145,6 +146,9 @@ export default function FichaPage() {
                         title="Edad biológica estimada por maduración (Moore). Requiere estatura."
                       />
                       <span className="subnote">Biológica (est.){bio == null ? " · falta estatura" : ""}</span>
+                      <Link href="/metodologia#edad-biologica" className="link-metodo">
+                        ¿Cómo se calcula?
+                      </Link>
                     </div>
                   </div>
                 </div>

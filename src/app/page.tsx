@@ -1,6 +1,7 @@
 'use client';
 
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import {
   Activity,
@@ -98,6 +99,15 @@ const demoBodyProfile: Record<string, { weight: number; height: number; notes: s
   juan: { weight: 61.8, height: 170, notes: 'Perfil atleta con alto rendimiento en velocidad y salto.' },
 };
 const defaultAthletePhoto = '/images/default-athlete.svg';
+
+/**
+ * Fuentes que el optimizador de Next no puede procesar: las fotos recién elegidas
+ * en el navegador (aún no están en el servidor) y los SVG, que rechaza con un 400
+ * salvo que se active `dangerouslyAllowSVG`. El placeholder pesa 441 B: no hay nada
+ * que optimizar en él.
+ */
+const isUnoptimizable = (src: string) =>
+  src.startsWith('blob:') || src.startsWith('data:') || src.endsWith('.svg');
 
 type AssessmentDraft = AssessmentDraftInput;
 type SprintDistance = '10' | '20' | '30';
@@ -1110,8 +1120,13 @@ function AthleteDetailView({
           onClick={() => setZoom(false)}
           role="dialog"
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={athlete.photoUrl} alt={athlete.name} className="max-h-[90dvh] max-w-[92vw] rounded-lg object-contain" />
+          <AthletePhoto
+            src={athlete.photoUrl}
+            alt={athlete.name}
+            width={1024}
+            height={1024}
+            className="max-h-[90dvh] max-w-[92vw] rounded-lg object-contain"
+          />
           <button
             type="button"
             onClick={() => setZoom(false)}
@@ -2029,8 +2044,13 @@ function ReportPhoto({ athlete }: { athlete: Athlete }) {
   return (
     <div className="flex items-center gap-4 lg:block">
       <div className="grid h-[150px] w-[120px] shrink-0 place-items-center overflow-hidden rounded-lg border border-brand/25 bg-brand/8">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={athlete.photoUrl ?? defaultAthletePhoto} alt={athlete.name} className="h-full w-full object-cover" />
+        <AthletePhoto
+          src={athlete.photoUrl ?? defaultAthletePhoto}
+          alt={athlete.name}
+          width={120}
+          height={150}
+          className="h-full w-full object-cover"
+        />
       </div>
       <p className="text-xs font-semibold text-muted-foreground lg:mt-2">Foto del deportista</p>
     </div>
@@ -3026,12 +3046,54 @@ function FormField({ label, children }: { label: string; children: React.ReactNo
   );
 }
 
-function Avatar({ name, photoUrl, size = 'md' }: { name: string; photoUrl?: string; size?: 'md' | 'lg' }) {
-  return (
+/**
+ * Foto de deportista servida por el optimizador de Next: la original de Supabase
+ * pesa ~2 MB y aquí baja a unos pocos KB en WebP al tamaño real de pantalla.
+ * Las previsualizaciones locales (blob:/data:) no se pueden optimizar y caen a <img>.
+ */
+function AthletePhoto({
+  src,
+  alt,
+  width,
+  height,
+  className,
+  priority = false,
+}: {
+  src: string;
+  alt: string;
+  width: number;
+  height: number;
+  className: string;
+  priority?: boolean;
+}) {
+  if (isUnoptimizable(src)) {
     // eslint-disable-next-line @next/next/no-img-element
-    <img
+    return <img src={src} alt={alt} className={className} loading="lazy" decoding="async" />;
+  }
+  // Sin `sizes` a propósito: con él Next asume una imagen fluida y arma el srcset
+  // con `deviceSizes` (640 px como mínimo, ~70 KB). Omitiéndolo usa `imageSizes` y
+  // genera solo 1x/2x del tamaño real — 48 y 96 px para un avatar.
+  return (
+    <Image
+      src={src}
+      alt={alt}
+      width={width}
+      height={height}
+      quality={70}
+      priority={priority}
+      className={className}
+    />
+  );
+}
+
+function Avatar({ name, photoUrl, size = 'md' }: { name: string; photoUrl?: string; size?: 'md' | 'lg' }) {
+  const px = size === 'lg' ? 64 : 48;
+  return (
+    <AthletePhoto
       src={photoUrl ?? defaultAthletePhoto}
       alt={name}
+      width={px}
+      height={px}
       className={`${size === 'lg' ? 'size-16' : 'size-12'} shrink-0 rounded-md object-cover ring-1 ring-brand/20`}
     />
   );

@@ -137,6 +137,30 @@ export function edadDecimal(fechaNac: string): number | null {
 }
 
 /**
+ * Coeficientes de la ecuación de Moore (2015) y edad media de PHV (pico de
+ * velocidad de crecimiento) por sexo. Se exportan para que /metodologia
+ * documente los valores que realmente usa el cálculo, sin copiarlos.
+ */
+export const MOORE = {
+  M: { intercepto: -7.999994, pendiente: 0.0036124, aphv: 13.8 },
+  F: { intercepto: -7.709133, pendiente: 0.0042232, aphv: 12.0 },
+} as const;
+
+/** Rango de edad en el que la ecuación de Moore está validada (años). */
+export const MADURACION_EDAD_VALIDA = { min: 8, max: 17 } as const;
+
+/** Años desde el PHV: negativo = aún no llega al estirón, positivo = ya pasó. */
+export function maturityOffset(
+  sexo: Sexo,
+  edadDec: number | null,
+  estaturaCm: number | null
+): number | null {
+  if (edadDec == null || estaturaCm == null || isNaN(edadDec) || isNaN(estaturaCm) || estaturaCm <= 0) return null;
+  const { intercepto, pendiente } = MOORE[sexo];
+  return intercepto + pendiente * (edadDec * estaturaCm); // AH = edad × estatura
+}
+
+/**
  * Edad biológica estimada (años) por maduración — ecuación de Moore (2015),
  * "maturity offset" a partir de sexo, edad y estatura. Es una ESTIMACIÓN:
  * el método puede cambiarse (Mirwald con talla sentado, Khamis-Roche con
@@ -147,11 +171,7 @@ export function edadBiologica(
   edadDec: number | null,
   estaturaCm: number | null
 ): number | null {
-  if (edadDec == null || estaturaCm == null || isNaN(edadDec) || isNaN(estaturaCm) || estaturaCm <= 0) return null;
-  const AH = edadDec * estaturaCm; // edad × estatura
-  const offset = sexo === "M"
-    ? -7.999994 + 0.0036124 * AH
-    : -7.709133 + 0.0042232 * AH;
-  const refAPHV = sexo === "M" ? 13.8 : 12.0; // edad media de pico de velocidad de crecimiento
-  return refAPHV + offset;
+  const offset = maturityOffset(sexo, edadDec, estaturaCm);
+  if (offset == null) return null;
+  return MOORE[sexo].aphv + offset;
 }
