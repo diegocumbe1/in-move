@@ -11,6 +11,9 @@
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
+    // Los *.test.ts los ejecuta el runner nativo de Node, que exige la extensión
+    // explícita en los imports. Válido porque el proyecto es noEmit.
+    "allowImportingTsExtensions": true,
     "jsx": "preserve",
     "incremental": true,
     "plugins": [{ "name": "next" }],

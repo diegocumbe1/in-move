@@ -1,8 +1,10 @@
 import type { Level } from '@/styles/tokens';
 import type { IndicatorComparison, RadarAxis } from '@/lib/comparison';
 import type { Rom } from '@/lib/ficha';
+import type { MaturityReport } from '@/lib/maturity';
 import { PerfilRadar } from './perfil-radar';
 import { RomAsymmetry } from './rom-asymmetry';
+import { MaturityPanel } from './maturity-panel';
 
 const dotBg: Record<Level, string> = {
   danger: 'bg-red-500',
@@ -76,10 +78,12 @@ export function FichaComparison({
   comparisons,
   radar,
   rom,
+  maturity,
 }: {
   comparisons: IndicatorComparison[];
   radar: RadarAxis[];
   rom?: Rom | null;
+  maturity?: MaturityReport | null;
 }) {
   const hasRadar = radar.some((axis) => axis.score > 0);
   return (
@@ -103,6 +107,8 @@ export function FichaComparison({
             </div>
           </div>
         ) : null}
+
+        {maturity?.applicable ? <MaturityPanel maturity={maturity} /> : null}
 
         <RomAsymmetry rom={rom} />
 

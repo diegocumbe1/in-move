@@ -19,6 +19,10 @@ export const anthropometrySchema = z.object({
   imc: z.number().optional(),
   pctGrasa: z.number().optional(),
   pctMasa: z.number().optional(),
+  // Talla de los padres: entra en la predicción de estatura adulta (Khamis-Roche).
+  // Se mide una vez y se arrastra; no cambia entre valoraciones.
+  tallaPadreCm: z.number().optional(),
+  tallaMadreCm: z.number().optional(),
 });
 
 // § 3. Cardiovascular (frecuencia cardiaca)

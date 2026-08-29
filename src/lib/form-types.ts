@@ -25,6 +25,8 @@ export type AssessmentDraftInput = {
   height: string; // estatura cm
   sittingHeight: string; // estatura sentado cm
   wingspan: string; // envergadura cm
+  tallaPadre: string; // talla del padre cm (predicción de estatura adulta)
+  tallaMadre: string; // talla de la madre cm
   imc: string; // indice de masa corporal
   fat: string; // % grasa
   masa: string; // % masa corporal
@@ -85,7 +87,7 @@ export type AssessmentDraftInput = {
 /** Draft vacío con todos los campos en string vacío. */
 export const emptyDraft: AssessmentDraftInput = {
   assessedOn: '',
-  weight: '', height: '', sittingHeight: '', wingspan: '', imc: '', fat: '', masa: '',
+  weight: '', height: '', sittingHeight: '', wingspan: '', tallaPadre: '', tallaMadre: '', imc: '', fat: '', masa: '',
   restingHr: '', fcInicial: '', fcFinal: '', fcMax: '',
   colFlex: '', colExt: '', hombRotIntIzq: '', hombRotIntDer: '', hombRotExtIzq: '', hombRotExtDer: '',
   hombFlexIzq: '', hombFlexDer: '', caderaIzq: '', caderaDer: '', rodillaIzq: '', rodillaDer: '',

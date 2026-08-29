@@ -61,6 +61,7 @@ import { uploadAthletePhoto } from '@/lib/upload';
 import { createClient as createSupabaseClient } from '@/lib/supabase/client';
 import type { AssessmentDraftInput } from '@/lib/form-types';
 import { classifyCmj, classifySitReach, jumpAverage } from '@/lib/scales';
+import { isMaturityApplicable, offsetSentence } from '@/lib/maturity';
 import { cmjScore } from '@/lib/norms';
 import { FICHA_SECTION_KEYS, FICHA_SECTION_LABELS, sectionsForCategory, type CatalogKind, type FichaSectionsConfig, type FichaSectionKey, type FichaTheme } from '@/lib/ficha';
 
@@ -1404,7 +1405,7 @@ function AssessmentView({
     const p = assessment.raw?.performance ?? {};
     return {
       assessedOn: assessment.date,
-      weight: s(a.pesoKg), height: s(a.estaturaCm), sittingHeight: s(a.estaturaSentadoCm), wingspan: s(a.envergaduraCm), imc: s(a.imc), fat: s(a.pctGrasa), masa: s(a.pctMasa),
+      weight: s(a.pesoKg), height: s(a.estaturaCm), sittingHeight: s(a.estaturaSentadoCm), wingspan: s(a.envergaduraCm), tallaPadre: s(a.tallaPadreCm), tallaMadre: s(a.tallaMadreCm), imc: s(a.imc), fat: s(a.pctGrasa), masa: s(a.pctMasa),
       restingHr: s(c.fcReposo), fcInicial: s(c.fcInicial), fcFinal: s(c.fcFinal), fcMax: s(c.fcMax),
       colFlex: s(r.columnaFlexion), colExt: s(r.columnaExtension),
       hombRotIntIzq: s(r.hombroRotIntIzq), hombRotIntDer: s(r.hombroRotIntDer),
@@ -1507,6 +1508,12 @@ function AssessmentView({
   const assessedOnValue = draft.assessedOn || assessment.date;
   const age = chronologicalAge(athlete.birthDate, assessedOnValue);
   const bioAge = biologicalAge(athlete.sex, athlete.birthDate, assessedOnValue, heightValue, sittingHeightValue, weightValue);
+  // Lectura del offset: la edad al PHV por sí sola confunde (13.5 en un chico de
+  // 15 suena a "va atrasado" cuando significa que el estirón ya pasó).
+  const ageDecimal = yearsBetween(athlete.birthDate, assessedOnValue);
+  const phvApplies = isMaturityApplicable(ageDecimal);
+  const phvSentence =
+    !phvApplies || bioAge == null || ageDecimal == null ? null : offsetSentence(ageDecimal - bioAge);
   const fatStatus = classifyFat(athlete.sex, fatValue);
   const hrStatus = classifyRestingHr(restingHrValue);
   const sitReachStatus = classifySitReach(athlete.sex, age, sitReachValue);
@@ -1549,6 +1556,8 @@ function AssessmentView({
         estaturaCm: heightValue ?? undefined,
         estaturaSentadoCm: sittingHeightValue ?? undefined,
         envergaduraCm: toNumber(draft.wingspan) ?? undefined,
+        tallaPadreCm: toNumber(draft.tallaPadre) ?? undefined,
+        tallaMadreCm: toNumber(draft.tallaMadre) ?? undefined,
         imc: imcValue ?? undefined,
         pctGrasa: fatValue ?? undefined,
         pctMasa: toNumber(draft.masa) ?? undefined,
@@ -1663,8 +1672,21 @@ function AssessmentView({
             <FormField label="Edad cronologica">
               <input readOnly value={age == null ? '—' : `${age} años`} className="field-control" />
             </FormField>
-            <FormField label="Edad biologica estimada">
-              <input readOnly value={bioAge == null ? 'Falta peso, estatura o estatura sentado' : `${bioAge.toFixed(1)} años`} className="field-control" />
+            <FormField label="Edad estimada al PHV">
+              <input
+                readOnly
+                value={
+                  !phvApplies
+                    ? 'No aplica fuera de 8-18 años'
+                    : bioAge == null
+                      ? 'Falta peso, estatura o estatura sentado'
+                      : `${bioAge.toFixed(1)} años`
+                }
+                className="field-control"
+              />
+              <span className="mt-1 block text-xs text-muted-foreground">
+                {phvSentence ?? 'Edad a la que se estima el pico de crecimiento (Mirwald).'}
+              </span>
             </FormField>
             <FormField label="Sexo">
               <select disabled={!isAdmin} defaultValue={athlete.sex} className="field-control">
@@ -1708,6 +1730,14 @@ function AssessmentView({
           </FormField>
           <FormField label="Envergadura (cm)">
             <input disabled={!isAdmin} inputMode="decimal" value={draft.wingspan} onChange={(event) => updateDraft('wingspan', event.target.value)} placeholder="Ej. 168" className="field-control" />
+          </FormField>
+          <FormField label="Talla del padre (cm)">
+            <input disabled={!isAdmin} inputMode="decimal" value={draft.tallaPadre} onChange={(event) => updateDraft('tallaPadre', event.target.value)} placeholder="Ej. 180" className="field-control" />
+            <span className="mt-1 block text-xs text-muted-foreground">Para la predicción de estatura adulta.</span>
+          </FormField>
+          <FormField label="Talla de la madre (cm)">
+            <input disabled={!isAdmin} inputMode="decimal" value={draft.tallaMadre} onChange={(event) => updateDraft('tallaMadre', event.target.value)} placeholder="Ej. 165" className="field-control" />
+            <span className="mt-1 block text-xs text-muted-foreground">Se mide una vez; se arrastra entre valoraciones.</span>
           </FormField>
           <FormField label="IMC">
             <input disabled={!isAdmin} inputMode="decimal" value={draft.imc} onChange={(event) => updateDraft('imc', event.target.value)} placeholder="Ej. 21.9" className="field-control" />
@@ -1943,16 +1973,18 @@ function PublicAssessmentView({
     weight: assessment.profile?.weight ?? bodyProfile.weight,
     height: assessment.profile?.height ?? bodyProfile.height,
     chronologicalAge: assessment.profile?.chronologicalAge ?? chronologicalAge(athlete.birthDate, assessment.date),
-    biologicalAge:
-      assessment.profile?.biologicalAge ??
-      biologicalAge(
-        athlete.sex,
-        athlete.birthDate,
-        assessment.date,
-        anthropometry?.estaturaCm ?? assessment.profile?.height ?? bodyProfile.height,
-        anthropometry?.estaturaSentadoCm ?? null,
-        anthropometry?.pesoKg ?? assessment.profile?.weight ?? bodyProfile.weight,
-      ),
+    // Solo entre los 8 y los 18: fuera de ese rango la ecuación se extrapola.
+    biologicalAge: !isMaturityApplicable(yearsBetween(athlete.birthDate, assessment.date))
+      ? null
+      : (assessment.profile?.biologicalAge ??
+        biologicalAge(
+          athlete.sex,
+          athlete.birthDate,
+          assessment.date,
+          anthropometry?.estaturaCm ?? assessment.profile?.height ?? bodyProfile.height,
+          anthropometry?.estaturaSentadoCm ?? null,
+          anthropometry?.pesoKg ?? assessment.profile?.weight ?? bodyProfile.weight,
+        )),
     speed10m: assessment.profile?.speed10m,
     squat1rm: assessment.profile?.squat1rm,
     vo2: assessment.profile?.vo2,
@@ -1978,7 +2010,7 @@ function PublicAssessmentView({
               <ReportFact label="Documento" value={athlete.document} />
               <ReportFact label="Nacimiento" value={formatDate(athlete.birthDate)} />
               <ReportFact label="Edad cronologica" value={profile.chronologicalAge == null ? '—' : `${profile.chronologicalAge} años`} />
-              <ReportFact label="Edad biologica est." value={profile.biologicalAge == null ? '—' : `${profile.biologicalAge.toFixed(1)} años`} />
+              <ReportFact label="Edad est. al PHV" value={profile.biologicalAge == null ? '—' : `${profile.biologicalAge.toFixed(1)} años`} />
             </div>
           </div>
 

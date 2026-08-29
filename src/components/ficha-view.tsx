@@ -6,18 +6,21 @@ import { FichaComparison } from './ficha-comparison';
 import { FichaToolbar } from './ficha-toolbar';
 import type { IndicatorComparison, RadarAxis } from '@/lib/comparison';
 import type { Rom, FichaSectionKey } from '@/lib/ficha';
+import type { MaturityReport } from '@/lib/maturity';
 
 export function FichaView({
   data,
   comparisons,
   radar,
   rom,
+  maturity,
   sections,
 }: {
   data: FichaData;
   comparisons: IndicatorComparison[];
   radar: RadarAxis[];
   rom?: Rom | null;
+  maturity?: MaturityReport | null;
   sections?: FichaSectionKey[];
 }) {
   const showComparison = !sections || sections.includes('comparison');
@@ -51,7 +54,7 @@ export function FichaView({
       </div>
       {showComparison ? (
         <div className={`${activeTab === 'comp' ? 'block' : 'hidden'} ficha-print print:block print:break-before-page`}>
-          <FichaComparison comparisons={comparisons} radar={radar} rom={rom} />
+          <FichaComparison comparisons={comparisons} radar={radar} rom={rom} maturity={maturity} />
         </div>
       ) : null}
     </div>

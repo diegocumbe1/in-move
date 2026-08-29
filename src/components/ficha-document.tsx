@@ -3,7 +3,8 @@
 import { Fragment, useState } from 'react';
 import Image from 'next/image';
 import type { Anthropometry, Cardio, Flexibility, Performance, Rom, FichaSectionKey } from '@/lib/ficha';
-import { biologicalAge } from '@/lib/scales';
+import { biologicalAge, yearsBetween } from '@/lib/scales';
+import { isMaturityApplicable } from '@/lib/maturity';
 
 /**
  * Documento de la FICHA DE VALORACIÓN IN MOVE — branding verde, estructurado
@@ -191,7 +192,12 @@ export function FichaDocument({ data, sections }: { data: FichaData; sections?: 
   const show = (key: FichaSectionKey) => !sections || sections.includes(key);
 
   const imc = a.imc ?? null;
-  const bioAge = biologicalAge(data.sex, data.birthDate, data.assessedOn, a.estaturaCm, a.estaturaSentadoCm, a.pesoKg);
+  // El PHV solo se muestra en edades donde las ecuaciones fueron validadas: en un
+  // adulto la extrapolación da un número creíble pero sin respaldo.
+  const showPhv = isMaturityApplicable(yearsBetween(data.birthDate, data.assessedOn));
+  const bioAge = showPhv
+    ? biologicalAge(data.sex, data.birthDate, data.assessedOn, a.estaturaCm, a.estaturaSentadoCm, a.pesoKg)
+    : null;
   return (
     <div className="mx-auto w-full max-w-[900px] rounded-2xl border-2 border-green-600 bg-[var(--fc-card)] p-4 text-[var(--fc-ink)] md:p-6">
       {/* Header */}
@@ -217,7 +223,7 @@ export function FichaDocument({ data, sections }: { data: FichaData; sections?: 
             <Field label="Código" value={data.code} />
           </div>
           <div className="grid gap-1.5 sm:grid-cols-2">
-            <Field label="Edad biológica est." value={bioAge == null ? '—' : `${bioAge.toFixed(1)} años`} />
+            {showPhv ? <Field label="Edad est. al PHV" value={bioAge == null ? '—' : `${bioAge.toFixed(1)} años`} /> : null}
             <Field label="IMC" value={imc == null ? '—' : imc.toFixed(1)} />
           </div>
         </div>

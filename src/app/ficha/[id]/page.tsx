@@ -2,6 +2,8 @@ import { notFound } from 'next/navigation';
 import { getFichaData } from '@/lib/ficha-data';
 import { getFichaTheme, getFichaSectionsByCategory } from '@/lib/actions';
 import { buildComparison, buildRadar } from '@/lib/comparison';
+import { buildMaturityReport } from '@/lib/maturity';
+import { yearsBetween } from '@/lib/scales';
 import { sectionsForCategory } from '@/lib/ficha';
 import { FichaView } from '@/components/ficha-view';
 
@@ -34,10 +36,23 @@ export default async function FichaPublicaPage({
   // La edad decide el baremo aplicado en CMJ y Sit and Reach.
   const comparisons = buildComparison(data.sex, data.age, measures);
   const radar = buildRadar(measures, data.age);
+  // La madurez necesita la edad decimal, no la redondeada que usan los baremos.
+  const maturity = buildMaturityReport(
+    data.sex,
+    yearsBetween(data.birthDate, data.assessedOn),
+    data.anthropometry,
+  );
 
   return (
     <div className="ficha-scope min-h-dvh bg-[var(--fc-page)] px-4 py-6 print:p-0" data-theme={theme}>
-      <FichaView data={data} comparisons={comparisons} radar={radar} rom={data.rom} sections={sections} />
+      <FichaView
+        data={data}
+        comparisons={comparisons}
+        radar={radar}
+        rom={data.rom}
+        maturity={maturity}
+        sections={sections}
+      />
     </div>
   );
 }
