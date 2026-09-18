@@ -36,8 +36,10 @@ export async function updateSession(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
   const isLogin = pathname.startsWith('/login');
-  // /ficha/[id] es la ficha pública del deportista: accesible sin sesión.
-  const isPublic = isLogin || pathname.startsWith('/ficha');
+  // Rutas accesibles sin sesión:
+  // - /ficha/[id]   -> ficha pública del deportista
+  // - /propuestas/* -> propuestas comerciales que se comparten por enlace
+  const isPublic = isLogin || pathname.startsWith('/ficha') || pathname.startsWith('/propuestas');
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();

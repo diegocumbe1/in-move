@@ -1,0 +1,837 @@
+<title>In Move Fase 2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;0,8..60,700;1,8..60,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style>
+  :root{
+    --paper:#F4F7F3;
+    --card:#FFFFFF;
+    --card-2:#EDF2EB;
+    --ink:#111815;
+    --ink-2:#3A453F;
+    --muted:#697468;
+    --hair:#DBE3D8;
+    --hair-2:#C6D2C2;
+    --accent:#15803D;
+    --accent-soft:#E3F2E5;
+    --pop:#5FA80E;
+    --lo:#C0392B;
+    --mid:#B07908;
+    --hi:#1E9E5A;
+    --lo-bg:#FAE9E7;
+    --mid-bg:#FBF2DC;
+    --hi-bg:#E2F4EA;
+    --shadow:0 1px 2px rgba(17,24,21,.05), 0 8px 24px -14px rgba(17,24,21,.18);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper:#0A0F0D;
+      --card:#121A16;
+      --card-2:#0F1613;
+      --ink:#E9EDE9;
+      --ink-2:#B6C0B8;
+      --muted:#8B9790;
+      --hair:#1F2C25;
+      --hair-2:#2C3B33;
+      --accent:#4ADE80;
+      --accent-soft:#12291C;
+      --pop:#8CEB2F;
+      --lo:#F2827A;
+      --mid:#E8BE5E;
+      --hi:#5BD79B;
+      --lo-bg:#2A1614;
+      --mid-bg:#2A2113;
+      --hi-bg:#10281C;
+      --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -18px rgba(0,0,0,.8);
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#0A0F0D;
+    --card:#121A16;
+    --card-2:#0F1613;
+    --ink:#E9EDE9;
+    --ink-2:#B6C0B8;
+    --muted:#8B9790;
+    --hair:#1F2C25;
+    --hair-2:#2C3B33;
+    --accent:#4ADE80;
+    --accent-soft:#12291C;
+    --pop:#8CEB2F;
+    --lo:#F2827A;
+    --mid:#E8BE5E;
+    --hi:#5BD79B;
+    --lo-bg:#2A1614;
+    --mid-bg:#2A2113;
+    --hi-bg:#10281C;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -18px rgba(0,0,0,.8);
+  }
+
+  *{box-sizing:border-box;}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:"Source Serif 4","Iowan Old Style",Georgia,serif;
+    font-size:17px;
+    line-height:1.62;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1040px;margin:0 auto;padding:0 28px 96px;}
+
+  /* ---------- masthead ---------- */
+  .mast{
+    padding:48px 0 30px;
+    border-bottom:2px solid var(--ink);
+    display:flex;flex-wrap:wrap;gap:32px;align-items:flex-end;justify-content:space-between;
+  }
+  .mast-id{display:flex;align-items:center;gap:11px;margin-bottom:22px;}
+  .glyph{
+    width:26px;height:26px;flex:none;border-radius:5px;
+    background:var(--accent);
+    display:grid;place-items:center;
+  }
+  .glyph span{
+    display:block;width:0;height:0;
+    border-left:5px solid transparent;border-right:5px solid transparent;
+    border-bottom:8px solid var(--paper);
+  }
+  .wordmark{
+    font-family:"Archivo",system-ui,sans-serif;font-weight:800;font-size:13px;
+    letter-spacing:.2em;text-transform:uppercase;color:var(--ink);
+  }
+  .eyebrow{
+    font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11px;font-weight:500;
+    letter-spacing:.16em;text-transform:uppercase;color:var(--accent);
+  }
+  h1{
+    font-family:"Archivo",system-ui,sans-serif;font-weight:800;
+    font-size:clamp(38px,6.4vw,62px);line-height:.98;letter-spacing:-.028em;
+    margin:12px 0 0;text-wrap:balance;max-width:13ch;
+  }
+  h1 em{font-style:normal;color:var(--accent);}
+  .mast-sub{
+    font-size:19px;color:var(--ink-2);margin:16px 0 0;max-width:46ch;
+  }
+  .meta{
+    font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12px;line-height:1.5;
+    display:grid;grid-template-columns:auto auto;gap:5px 18px;
+    color:var(--muted);flex:none;padding-bottom:4px;
+  }
+  .meta dt{text-transform:uppercase;letter-spacing:.09em;font-size:10.5px;padding-top:2px;}
+  .meta dd{margin:0;color:var(--ink);font-weight:500;}
+
+  /* ---------- index ---------- */
+  .index{
+    display:flex;flex-wrap:wrap;gap:0 26px;
+    padding:15px 0;border-bottom:1px solid var(--hair);
+    font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11.5px;
+  }
+  .index a{color:var(--muted);text-decoration:none;padding:3px 0;border-bottom:1px solid transparent;}
+  .index a:hover,.index a:focus-visible{color:var(--accent);border-bottom-color:var(--accent);}
+  .index b{color:var(--ink);font-weight:500;}
+
+  /* ---------- sections ---------- */
+  section{padding-top:58px;scroll-margin-top:20px;}
+  .snum{
+    font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11px;font-weight:600;
+    letter-spacing:.14em;color:var(--accent);display:block;margin-bottom:9px;
+  }
+  h2{
+    font-family:"Archivo",system-ui,sans-serif;font-weight:700;
+    font-size:clamp(26px,3.4vw,34px);line-height:1.1;letter-spacing:-.02em;
+    margin:0 0 8px;text-wrap:balance;
+  }
+  h3{
+    font-family:"Archivo",system-ui,sans-serif;font-weight:700;font-size:19px;
+    letter-spacing:-.01em;margin:36px 0 10px;
+  }
+  h4{
+    font-family:"IBM Plex Mono",ui-monospace,monospace;font-weight:600;font-size:11px;
+    letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:30px 0 12px;
+  }
+  p{margin:0 0 16px;max-width:66ch;}
+  .lede{font-size:19px;color:var(--ink-2);max-width:60ch;}
+  strong{font-weight:700;color:var(--ink);}
+  a{color:var(--accent);}
+  em.q{font-style:italic;color:var(--ink-2);}
+
+  /* ---------- tables ---------- */
+  .tscroll{overflow-x:auto;margin:18px 0 22px;}
+  table{
+    width:100%;border-collapse:collapse;font-size:15px;
+    font-variant-numeric:tabular-nums;min-width:520px;
+  }
+  th{
+    font-family:"IBM Plex Mono",ui-monospace,monospace;font-weight:600;font-size:10.5px;
+    letter-spacing:.11em;text-transform:uppercase;color:var(--muted);
+    text-align:left;padding:0 14px 9px 0;border-bottom:1.5px solid var(--ink);vertical-align:bottom;
+  }
+  td{padding:11px 14px 11px 0;border-bottom:1px solid var(--hair);vertical-align:top;color:var(--ink-2);}
+  td:first-child{color:var(--ink);}
+  tr:last-child td{border-bottom:0;}
+  .num{text-align:right;padding-right:0;font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:14px;}
+  th.num{text-align:right;padding-right:0;}
+  .subrow td{border-top:1.5px solid var(--hair-2);font-weight:700;color:var(--ink);}
+  .totrow td{border-top:1.5px solid var(--ink);border-bottom:0;padding-top:12px;font-weight:700;color:var(--ink);}
+  .freerow td{background:var(--hi-bg);}
+  .freerow s{color:var(--muted);text-decoration-thickness:1px;}
+
+  /* ---------- pills ---------- */
+  .pill{
+    display:inline-block;font-family:"IBM Plex Mono",monospace;font-size:10.5px;font-weight:600;
+    letter-spacing:.05em;padding:3px 8px;border-radius:3px;white-space:nowrap;
+  }
+  .p-hi{background:var(--hi-bg);color:var(--hi);}
+  .p-mid{background:var(--mid-bg);color:var(--mid);}
+  .p-lo{background:var(--lo-bg);color:var(--lo);}
+
+  /* ---------- callout ---------- */
+  .note{
+    border-left:3px solid var(--accent);background:var(--accent-soft);
+    padding:16px 20px;margin:22px 0;border-radius:0 3px 3px 0;
+  }
+  .note p{margin:0;max-width:62ch;font-size:15.5px;color:var(--ink-2);}
+  .note p+p{margin-top:10px;}
+  .warn{border-left-color:var(--mid);background:var(--mid-bg);}
+
+  /* ---------- excluded ---------- */
+  .nope{list-style:none;padding:0;margin:20px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:0 30px;}
+  .nope li{
+    position:relative;padding:9px 0 9px 26px;font-size:15px;color:var(--muted);
+    border-bottom:1px solid var(--hair);
+  }
+  .nope li::before,.nope li::after{
+    content:"";position:absolute;left:4px;top:18px;width:11px;height:1.5px;background:var(--hair-2);
+  }
+  .nope li::before{transform:rotate(45deg);}
+  .nope li::after{transform:rotate(-45deg);}
+
+  /* ---------- cortes ---------- */
+  .cortes{margin:24px 0 0;}
+  .corte{
+    display:grid;grid-template-columns:70px 1fr 104px;gap:22px;
+    padding:18px 0;border-top:1px solid var(--hair);align-items:start;
+  }
+  .corte:last-of-type{border-bottom:1px solid var(--hair);}
+  .ccode{
+    font-family:"Archivo",sans-serif;font-weight:800;font-size:22px;letter-spacing:-.02em;
+    color:var(--accent);
+  }
+  .corte.gratis .ccode{color:var(--hi);font-size:15px;padding-top:4px;}
+  .ctitle{font-family:"Archivo",sans-serif;font-weight:700;font-size:17px;margin:0 0 5px;color:var(--ink);}
+  .cbody{font-size:15px;color:var(--ink-2);margin:0;max-width:60ch;}
+  .ctime{
+    font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--muted);
+    text-align:right;padding-top:5px;
+  }
+  .cpay{
+    display:inline-block;margin-top:8px;font-family:"IBM Plex Mono",monospace;
+    font-size:10px;letter-spacing:.09em;color:var(--pop);border:1px solid var(--pop);
+    padding:2px 7px;border-radius:3px;
+  }
+  @media (max-width:680px){
+    .corte{grid-template-columns:54px 1fr;gap:16px;}
+    .ctime{grid-column:2;text-align:left;padding-top:0;}
+  }
+
+  /* ---------- gauge (el mismo recurso visual de la ficha) ---------- */
+  .gauge-block{
+    background:var(--card);border:1px solid var(--hair);border-radius:4px;
+    padding:26px 28px 22px;margin:26px 0;box-shadow:var(--shadow);
+  }
+  .gauge-cap{
+    font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.13em;
+    text-transform:uppercase;color:var(--muted);margin:0 0 20px;
+  }
+  .gauge{position:relative;margin:0 0 4px;padding-top:26px;}
+  .gbar{display:flex;height:14px;border-radius:2px;overflow:hidden;}
+  .gbar i{display:block;height:100%;}
+  .gticks{
+    display:flex;justify-content:space-between;margin-top:9px;
+    font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--muted);
+  }
+  .gmark{position:absolute;top:0;transform:translateX(-50%);text-align:center;}
+  .gmark b{
+    display:block;font-family:"IBM Plex Mono",monospace;font-size:11px;font-weight:600;
+    color:var(--ink);letter-spacing:.04em;white-space:nowrap;margin-bottom:3px;
+  }
+  .gmark s{
+    display:block;text-decoration:none;width:0;height:0;margin:0 auto;
+    border-left:6px solid transparent;border-right:6px solid transparent;
+    border-top:8px solid var(--ink);
+  }
+  .glabels{display:flex;margin-top:7px;font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;}
+  .glabels span{color:var(--muted);}
+
+  /* ---------- price ---------- */
+  .price{
+    display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px 30px;
+    margin:4px 0 6px;
+  }
+  .price-fig{
+    font-family:"Archivo",sans-serif;font-weight:800;letter-spacing:-.035em;
+    font-size:clamp(46px,8vw,76px);line-height:.9;color:var(--ink);
+    font-variant-numeric:tabular-nums;
+  }
+  .price-fig sup{font-size:.34em;font-weight:700;letter-spacing:.02em;vertical-align:super;color:var(--muted);margin-left:6px;}
+  .price-side{font-size:15px;color:var(--ink-2);max-width:32ch;padding-bottom:8px;}
+  .price-side b{color:var(--accent);}
+
+  /* ---------- cuotas ---------- */
+  .cuotas{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:24px 0 0;}
+  .cuotas.dos{grid-template-columns:repeat(2,1fr);max-width:620px;}
+  .cuota{
+    background:var(--card);border:1px solid var(--hair);border-radius:4px;padding:18px 20px;
+  }
+  .cuota.first{border-color:var(--accent);border-width:1.5px;}
+  .cuota .cwhen{
+    font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.13em;
+    text-transform:uppercase;color:var(--muted);margin:0 0 10px;
+  }
+  .cuota.first .cwhen{color:var(--accent);}
+  .cuota .camt{
+    font-family:"Archivo",sans-serif;font-weight:800;font-size:26px;letter-spacing:-.025em;
+    color:var(--ink);font-variant-numeric:tabular-nums;
+  }
+  .cuota .cpct{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--muted);margin-left:7px;}
+  .cuota .cdesc{font-size:14px;color:var(--ink-2);margin:8px 0 0;line-height:1.45;}
+  @media (max-width:700px){.cuotas{grid-template-columns:1fr;}}
+
+  /* ---------- conditions ---------- */
+  ol.cond{counter-reset:c;list-style:none;padding:0;margin:20px 0 0;}
+  ol.cond li{
+    counter-increment:c;position:relative;padding:13px 0 13px 42px;
+    border-bottom:1px solid var(--hair);font-size:15.5px;color:var(--ink-2);max-width:72ch;
+  }
+  ol.cond li::before{
+    content:counter(c,decimal-leading-zero);position:absolute;left:0;top:14px;
+    font-family:"IBM Plex Mono",monospace;font-size:11px;font-weight:600;color:var(--accent);
+  }
+
+  /* ---------- checklist ---------- */
+  .check{list-style:none;padding:0;margin:20px 0 0;}
+  .check li{
+    position:relative;padding:13px 0 13px 34px;border-bottom:1px solid var(--hair);
+    font-size:15.5px;color:var(--ink-2);max-width:74ch;
+  }
+  .check li::before{
+    content:"";position:absolute;left:0;top:16px;width:14px;height:14px;
+    border:1.5px solid var(--hair-2);border-radius:2px;background:var(--card);
+  }
+
+  /* ---------- footer ---------- */
+  .foot{
+    margin-top:68px;padding-top:22px;border-top:2px solid var(--ink);
+    display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between;align-items:baseline;
+    font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--muted);
+  }
+
+  :focus-visible{outline:2px solid var(--accent);outline-offset:3px;}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
+
+  /* ---------- toolbar ---------- */
+  .toolbar{
+    position:fixed;top:16px;right:16px;z-index:50;
+    display:flex;flex-direction:column;align-items:flex-end;gap:8px;
+  }
+  .hint{
+    max-width:250px;background:var(--card);border:1px solid var(--hair);
+    border-left:3px solid var(--mid);border-radius:4px;padding:10px 12px;
+    font-family:"Source Serif 4",Georgia,serif;font-size:13px;line-height:1.45;
+    color:var(--ink-2);box-shadow:var(--shadow);text-align:left;
+  }
+  .hint kbd{
+    font-family:"IBM Plex Mono",monospace;font-size:11.5px;background:var(--card-2);
+    border:1px solid var(--hair);border-radius:3px;padding:1px 5px;color:var(--ink);
+  }
+  .tbtn{
+    display:inline-flex;align-items:center;gap:7px;
+    font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11px;font-weight:600;
+    letter-spacing:.08em;text-transform:uppercase;
+    padding:9px 14px;border-radius:4px;cursor:pointer;
+    background:var(--accent);color:var(--paper);border:1px solid var(--accent);
+    box-shadow:var(--shadow);
+  }
+  .tbtn:hover{filter:brightness(1.08);}
+  .tbtn:active{transform:translateY(1px);}
+  .tbtn svg{width:13px;height:13px;flex:none;}
+  @media (max-width:760px){
+    .toolbar{top:auto;bottom:14px;right:14px;}
+    .tbtn span{display:none;}
+    .tbtn{padding:11px;border-radius:50%;}
+  }
+
+  /* ---------- print / PDF ---------- */
+  @page{size:A4;margin:14mm 13mm;}
+  @media print{
+    :root,
+    :root[data-theme="dark"],
+    :root[data-theme="light"],
+    :root:not([data-theme="light"]){
+      --paper:#FFFFFF;
+      --card:#FFFFFF;
+      --card-2:#F2F5F1;
+      --ink:#111815;
+      --ink-2:#333D38;
+      --muted:#5E6A62;
+      --hair:#D2DACF;
+      --hair-2:#B9C4B5;
+      --accent:#15803D;
+      --accent-soft:#EAF4EC;
+      --pop:#4A8A0B;
+      --lo:#B03327;
+      --mid:#96660A;
+      --hi:#177E48;
+      --lo-bg:#FAE9E7;
+      --mid-bg:#FBF2DC;
+      --hi-bg:#E2F4EA;
+      --shadow:none;
+    }
+    body{
+      font-size:10.5pt;line-height:1.5;background:#fff;
+      -webkit-print-color-adjust:exact;print-color-adjust:exact;
+    }
+    .wrap{max-width:none;padding:0;}
+    .toolbar,.index{display:none!important;}
+    .mast{padding-top:0;}
+    h1{font-size:32pt;}
+    h2{font-size:18pt;}
+    h3{font-size:12.5pt;margin-top:18px;}
+    p,td,th,li{max-width:none;}
+    section{padding-top:20px;break-inside:avoid;page-break-inside:avoid;}
+    #s5,#s7{break-before:page;page-break-before:always;}
+    h2,h3,h4{break-after:avoid;page-break-after:avoid;}
+    tr,.corte,.cuota,.gauge-block,.note{break-inside:avoid;page-break-inside:avoid;}
+    thead{display:table-header-group;}
+    .tscroll{overflow:visible;}
+    table{min-width:0;}
+    .cuotas,.cuotas.dos{grid-template-columns:repeat(2,1fr);}
+    a{color:var(--ink);text-decoration:none;}
+    .foot{margin-top:30px;}
+  }
+</style>
+
+<div class="toolbar">
+  <button type="button" class="tbtn" id="pdfBtn" title="Generar PDF (imprimir a PDF)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M12 3v12"></path><path d="m7 11 5 5 5-5"></path><path d="M4 21h16"></path>
+    </svg>
+    <span>Descargar PDF</span>
+  </button>
+  <div class="hint" id="pdfHint" hidden>
+    ¿No se abrió el diálogo de impresión? Abre esta página en una pestaña nueva y usa <kbd>⌘P</kbd> / <kbd>Ctrl P</kbd>. En destino elige <strong>Guardar como PDF</strong>.
+  </div>
+</div>
+
+<div class="wrap">
+
+  <header class="mast">
+    <div>
+      <div class="mast-id">
+        <div class="glyph"><span></span></div>
+        <div class="wordmark">In&nbsp;Move</div>
+      </div>
+      <div class="eyebrow">Propuesta · Fase 2</div>
+      <h1>Módulo de <em>grupos</em></h1>
+      <p class="mast-sub">Convertir la etiqueta “grupo” en un módulo administrable: con cupo, ficha propia, tabla de posiciones y control de qué información sale.</p>
+    </div>
+    <dl class="meta">
+      <dt>Cliente</dt><dd>In Move CS</dd>
+      <dt>Preparado&nbsp;por</dt><dd>Diego Cumbe</dd>
+      <dt>Fecha</dt><dd>18 · 09 · 2026</dd>
+      <dt>Versión</dt><dd>2.2</dd>
+      <dt>Vigencia</dt><dd>30 días</dd>
+    </dl>
+  </header>
+
+  <nav class="index" aria-label="Índice">
+    <a href="#s1"><b>01</b> Qué incluye</a>
+    <a href="#s2"><b>02</b> Alcance</a>
+    <a href="#s3"><b>03</b> Límites de plan</a>
+    <a href="#s4"><b>04</b> Por qué cuesta esto</a>
+    <a href="#s5"><b>05</b> Fases siguientes</a>
+    <a href="#s6"><b>06</b> Qué no incluye</a>
+    <a href="#s7"><b>07</b> Inversión</a>
+    <a href="#s8"><b>08</b> Condiciones</a>
+    <a href="#s9"><b>09</b> Para arrancar</a>
+  </nav>
+
+  <!-- 01 -->
+  <section id="s1">
+    <span class="snum">01</span>
+    <h2>Qué incluye esta fase</h2>
+    <p class="lede">Hoy el “grupo” es apenas <strong>una etiqueta de texto</strong> sobre el deportista. Sirve para clasificar, pero no es una entidad real: no tiene cupo, ni tabla de posiciones, ni ficha propia, ni control de qué información sale.</p>
+
+    <div class="cortes">
+      <div class="corte">
+        <div class="ccode">C1</div>
+        <div>
+          <p class="ctitle">Administración de grupos</p>
+          <p class="cbody">Grupos como entidad real: tipo, sede, cupo, logo y color. Asignar y retirar deportistas. Flags extensibles para abrir nuevas disciplinas y ciudades sin desarrollo.</p>
+        </div>
+        <div class="ctime">1.5 sem</div>
+      </div>
+      <div class="corte">
+        <div class="ccode">C2</div>
+        <div>
+          <p class="ctitle">Visibilidad y ficha grupal</p>
+          <p class="cbody">Matriz de qué se ve en cada ficha, y la ficha grupal en pantalla y en PDF, entregada por enlace compartible.</p>
+          <span class="cpay">AQUÍ SE PAGA LA 2.ª CUOTA</span>
+        </div>
+        <div class="ctime">1.5 sem</div>
+      </div>
+      <div class="corte gratis">
+        <div class="ccode">+</div>
+        <div>
+          <p class="ctitle">Estabilización y pruebas de regresión <span class="pill p-hi" style="vertical-align:3px;margin-left:6px;">Sin costo</span></p>
+          <p class="cbody">Verificar que nada de la Fase 1 se rompió, desplegar y capacitar. <strong>Se ejecuta igual, pero no se cobra.</strong></p>
+        </div>
+        <div class="ctime">0.5 sem</div>
+      </div>
+    </div>
+
+    <p style="margin-top:24px;"><strong>Duración total: 3 – 3.5 semanas</strong>, desde el abono inicial y la entrega del material.</p>
+
+    <div class="note warn">
+      <p><strong>Rankings, roles y usuarios con login quedan fuera de esta fase</strong> — ver sección 05. Es deliberado: son las partes más costosas, y <strong>el módulo de grupos queda funcionando completo sin ellas</strong>. Esta fase entrega el cimiento; lo demás se suma después, cuando el centro ya esté usando los grupos.</p>
+    </div>
+  </section>
+
+  <!-- 02 -->
+  <section id="s2">
+    <span class="snum">02</span>
+    <h2>Alcance por corte</h2>
+
+    <h3>C1 · Administración de grupos</h3>
+    <p>Se crea la entidad <strong>Grupo</strong> con nombre, descripción, logo y color propio; <strong>tipo</strong> (running, fútbol, ciclismo, gimnasio, colegio…); <strong>sede o ciudad</strong>; <strong>cupo máximo</strong> y estado; y fechas de ciclo. Desde el panel se crean y editan grupos, se asignan y retiran deportistas, y se filtra por tipo y sede.</p>
+    <p><strong>Membresías:</strong> un deportista puede pertenecer a más de un grupo, y se guarda el histórico de entradas y salidas. Si alguien sale del grupo en junio, sus mediciones de marzo siguen contando para el ranking de ese periodo, pero no aparece en la tabla actual.</p>
+    <p><strong>Migración:</strong> los grupos que hoy existen como texto se convierten en grupos reales, sin perder ningún dato.</p>
+
+    <h4>Flags extensibles — la clave para crecer</h4>
+    <div class="tscroll">
+      <table>
+        <thead><tr><th>Flag</th><th>Valores iniciales</th><th>Para qué sirve</th></tr></thead>
+        <tbody>
+          <tr><td>disciplina</td><td>running, fútbol, ciclismo, funcional</td><td>Define qué indicadores son relevantes y cómo se arma el ranking.</td></tr>
+          <tr><td>sede</td><td>Garzón</td><td>Permite abrir Neiva, Pitalito, Bogotá… <strong>sin tocar código</strong>.</td></tr>
+          <tr><td>modalidad</td><td>presencial, remoto, mixto</td><td>Clasificación operativa.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note">
+      <p>El día que In Move abra un segundo grupo de running en otra ciudad, o un grupo de ciclismo en Garzón, <strong>se crea desde el panel en dos minutos</strong>. No hay que llamarme, ni cotizar, ni desplegar nada.</p>
+    </div>
+    <div class="note warn">
+      <p><strong>Por confirmar:</strong> asumo que “Garzón” es una <strong>sede o ciudad</strong>. Si significa otra cosa (un convenio, un patrocinador), el mecanismo sirve igual — solo cambia el nombre del flag.</p>
+    </div>
+
+    <h3>C2 · Visibilidad y ficha grupal</h3>
+    <h4>Cómo llega la ficha al dueño del grupo</h4>
+    <p>Como los usuarios con login quedan para la Fase 3, el dueño del grupo recibe su ficha grupal <strong>por enlace compartible</strong> — el mismo mecanismo que ya funciona hoy para la ficha individual, y que el centro ya sabe usar.</p>
+    <p>El enlace muestra únicamente lo que la matriz de visibilidad permita. <strong>No hay acceso al panel, ni a otros grupos, ni a datos que no estén autorizados.</strong></p>
+
+    <h4>Matriz de visibilidad</h4>
+    <p>Este es el corazón de la fase: <strong>el dueño del grupo no debe ver todo lo que ve el deportista.</strong> Hay datos de salud —composición corporal, limitaciones articulares, observaciones clínicas— que no deben circular sin control. Más aún con menores de edad.</p>
+
+    <div class="tscroll">
+      <table>
+        <thead>
+          <tr>
+            <th style="min-width:200px;">Bloque de información</th>
+            <th>Ficha privada<br><span style="font-weight:400;text-transform:none;letter-spacing:0;">deportista / acudiente</span></th>
+            <th>Ficha grupal<br><span style="font-weight:400;text-transform:none;letter-spacing:0;">dueño del grupo</span></th>
+            <th>Enlace público</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Nombre y foto</td><td><span class="pill p-hi">Ve</span></td><td><span class="pill p-hi">Ve</span></td><td><span class="pill p-hi">Ve</span></td></tr>
+          <tr><td>Documento y fecha de nacimiento</td><td><span class="pill p-hi">Ve</span></td><td><span class="pill p-lo">No ve</span> <span style="font-size:13px;color:var(--muted);">solo edad</span></td><td><span class="pill p-lo">No ve</span></td></tr>
+          <tr><td>Rendimiento — CMJ, sprint, agilidad, fuerza</td><td><span class="pill p-hi">Ve</span></td><td><span class="pill p-hi">Ve</span></td><td><span class="pill p-hi">Ve</span></td></tr>
+          <tr><td>Antropometría — % grasa, masa, peso</td><td><span class="pill p-hi">Ve</span></td><td><span class="pill p-mid">Solo promedio</span></td><td><span class="pill p-lo">No ve</span></td></tr>
+          <tr><td>ROM y asimetrías</td><td><span class="pill p-hi">Ve</span></td><td><span class="pill p-mid">Solo semáforo</span></td><td><span class="pill p-lo">No ve</span></td></tr>
+          <tr><td>Flexibilidad</td><td><span class="pill p-hi">Ve</span></td><td><span class="pill p-mid">Solo semáforo</span></td><td><span class="pill p-lo">No ve</span></td></tr>
+          <tr><td>Observaciones y plan de trabajo</td><td><span class="pill p-hi">Ve</span></td><td><span class="pill p-lo">No ve</span></td><td><span class="pill p-lo">No ve</span></td></tr>
+          <tr><td>Alertas de riesgo</td><td><span class="pill p-hi">Ve</span></td><td><span class="pill p-mid">Conteo sin nombre</span></td><td><span class="pill p-lo">No ve</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="font-size:14px;color:var(--muted);">Todo lo marcado en ámbar es <strong>configurable por grupo</strong>: se puede subir a “ve” o bajar a “no ve”, dejando registro de quién lo cambió y cuándo.</p>
+
+    <div class="note">
+      <p><strong>Esto no es solo una funcionalidad, es una protección.</strong> Cubre la responsabilidad del centro frente a la Ley 1581 (Habeas Data) y frente a los acudientes de menores. Si mañana un padre pregunta “¿quién vio el porcentaje de grasa de mi hija?”, hay una respuesta.</p>
+    </div>
+
+    <h4>La ficha grupal</h4>
+    <p>Documento en pantalla y en PDF, con el mismo motor de impresión que ya funciona — sin costo adicional de librerías:</p>
+    <div class="tscroll">
+      <table>
+        <thead><tr><th style="width:52px;">#</th><th>Bloque</th><th>Contenido</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>Portada</td><td>Logo y color del grupo, sede, periodo, número de deportistas.</td></tr>
+          <tr><td>2</td><td>Composición</td><td>Distribución por sexo, edad y categoría.</td></tr>
+          <tr><td>3</td><td>Promedios</td><td>Por indicador, comparados contra la norma de referencia.</td></tr>
+          <tr><td>4</td><td>Semáforo grupal</td><td>% de deportistas en zona baja / media / óptima.</td></tr>
+          <tr><td>5</td><td>Evolución</td><td>Δ% por indicador entre dos periodos. <strong>El argumento de venta del entrenador ante su gente.</strong></td></tr>
+          <tr><td>6</td><td>Alertas</td><td>Según lo que la matriz de visibilidad permita.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note warn">
+      <p><strong>La tabla de posiciones llega con la Fase 3.</strong> En esta fase la ficha grupal entrega composición, promedios, semáforo grupal y evolución — que es lo que el dueño del grupo necesita para mostrarle resultados a su gente.</p>
+    </div>
+  </section>
+
+  <!-- 03 -->
+  <section id="s3">
+    <span class="snum">03</span>
+    <h2>Límites de plan y control de costo</h2>
+    <p class="lede">Techo configurable, visible en el panel.</p>
+    <div class="tscroll">
+      <table>
+        <thead><tr><th>Límite</th><th class="num" style="width:110px;">Propuesto</th><th>Razón</th></tr></thead>
+        <tbody>
+          <tr><td>Grupos activos</td><td class="num"><strong style="font-size:17px;">8</strong></td><td>Mantiene el consumo dentro del plan económico de base de datos.</td></tr>
+          <tr><td>Deportistas por grupo</td><td class="num"><strong style="font-size:17px;">40</strong></td><td>~320 deportistas en total.</td></tr>
+          <tr><td>Peso máximo por foto</td><td class="num"><strong style="font-size:17px;">1 MB</strong></td><td>El almacenamiento de imágenes es el costo que más rápido crece.</td></tr>
+          <tr><td>Retención de cortes de ranking</td><td class="num"><strong style="font-size:17px;">24</strong></td><td>Histórico suficiente sin inflar la base de datos.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p><strong>Aviso al 80% de uso</strong> y bloqueo suave al 100%: no se crean más grupos hasta ampliar el plan. Nada se borra de forma automática. Esto protege al centro de una factura sorpresa de infraestructura, y deja el terreno listo para vender planes por tamaño de grupo más adelante.</p>
+  </section>
+
+  <!-- 04 -->
+  <section id="s4">
+    <span class="snum">04</span>
+    <h2>Por qué esta fase cuesta lo que cuesta</h2>
+    <p class="lede">La Fase 1 se construyó sobre <strong>campo verde</strong>: no había nada que romper. La Fase 2 se construye <strong>sobre un sistema en producción, con datos reales y con enlaces de fichas ya compartidos con deportistas</strong>.</p>
+
+    <div class="tscroll">
+      <table>
+        <thead><tr><th></th><th>Fase 1</th><th>Fase 2</th></tr></thead>
+        <tbody>
+          <tr><td>Datos existentes</td><td>Ninguno</td><td>Deportistas y fichas reales del centro</td></tr>
+          <tr><td>Enlaces ya entregados</td><td>Ninguno</td><td><strong>Fichas compartidas que no pueden dejar de funcionar</strong></td></tr>
+          <tr><td>Si algo sale mal</td><td>Se corrige y ya</td><td>Se afecta la operación diaria del centro</td></tr>
+          <tr><td>Migración de datos</td><td>No aplica</td><td><strong>Obligatoria y sin pérdida</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>Buena parte del esfuerzo <strong>no produce pantallas nuevas</strong>. Produce garantías: migrar los grupos-texto sin perder una sola ficha, que cada enlace ya compartido siga abriendo igual, verificar después de cada cambio que ficha, PDF, comparación e histórico siguen intactos, y poder volver atrás si algo falla.</p>
+
+    <div class="note">
+      <p style="font-size:18px;color:var(--ink);">En Fase 1 pagaste por <strong>construir</strong>. En Fase 2 pagas por <strong>construir y además garantizar que lo que ya usas a diario no se rompa.</strong></p>
+    </div>
+
+    <p><strong>Y lo que habilita:</strong> la Fase 1 hizo al centro más eficiente — se acabó el papel. La Fase 2 le abre <strong>una línea de ingreso</strong>: pasar de vender valoraciones individuales a vender servicio a grupos, con un entregable propio que el dueño del grupo puede mostrarle a su gente.</p>
+  </section>
+
+  <!-- 05 -->
+  <section id="s5">
+    <span class="snum">05</span>
+    <h2>Qué queda para después</h2>
+    <p class="lede">Se separan a propósito: son las partes más costosas, y <strong>el módulo de grupos funciona completo sin ellas</strong>. Cada una se contrata cuando el centro la necesite, con la misma tarifa preferencial.</p>
+
+    <h3>Fase 3 · Rankings y tablas de posiciones</h3>
+    <p>Motor configurable por indicador (CMJ, sprint 30&nbsp;m, 5-10-5, % grasa, IMC, fuerza o score compuesto), con dirección, población (grupo / sede / global) y normalización por sexo y edad. Tabla con posición, valor, percentil, semáforo y movimiento frente a la medición anterior. Cortes por periodo para “campeón del mes” y evolución histórica.</p>
+    <p><strong>Referencia:</strong> ~26 h · ~$780.000 de valor de mercado.</p>
+    <div class="note">
+      <p><strong>Por qué puede esperar:</strong> el ranking es un incentivo, no una necesidad operativa. Primero el centro necesita administrar los grupos y poder entregarle algo al dueño; comparar deportistas entre sí viene después, y gana valor cuando ya hay varias mediciones acumuladas.</p>
+    </div>
+
+    <h3>Fase 4 · Roles y usuarios con login</h3>
+    <div class="tscroll">
+      <table>
+        <thead><tr><th style="min-width:250px;">Incluye</th><th>Por qué puede esperar</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Usuarios con login</strong> para dueños de grupo y evaluadores</td><td>En Fase 2 la ficha grupal llega por enlace compartible, que ya funciona.</td></tr>
+          <tr><td><strong>Roles y permisos</strong> — super admin, evaluador, dueño de grupo</td><td>Hoy un solo admin cubre la operación del centro.</td></tr>
+          <tr><td><strong>Blindaje de accesos por rol</strong> en cada acción del sistema</td><td>Solo se vuelve necesario cuando entran usuarios externos al panel.</td></tr>
+          <tr><td><strong>Migración de usuarios</strong> y auditoría de accesos</td><td>Depende de lo anterior.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p><strong>Referencia:</strong> ~40 h · ~$1.200.000 de valor de mercado.</p>
+
+    <div class="note">
+      <p><strong>Por qué es lo más caro de todo:</strong> hoy la aplicación asume “un solo admin” y la conexión a base de datos es directa, sin reglas de fila. Introducir roles obliga a <strong>revisar y blindar cada acción del sistema, una por una</strong>. Es trabajo que no se ve en pantalla, y es el que más responsabilidad carga.</p>
+    </div>
+  </section>
+
+  <!-- 06 -->
+  <section id="s6">
+    <span class="snum">06</span>
+    <h2>Qué no incluye</h2>
+    <p class="lede">Cualquiera se puede sumar; se cotiza aparte.</p>
+    <ul class="nope">
+      <li>Aplicación móvil nativa — sigue siendo web responsive, tablet-first</li>
+      <li>Envío automático por WhatsApp o correo</li>
+      <li>Cobros, pasarela de pago o facturación a los grupos</li>
+      <li>Auto-registro del deportista — sigue registrando el staff</li>
+      <li>Monitoreo de carga sRPE / ACWR y zonas de FC</li>
+      <li>Importación masiva desde Excel</li>
+      <li>Chat, notificaciones push o calendario de entrenamientos</li>
+    </ul>
+  </section>
+
+  <!-- 07 -->
+  <section id="s7">
+    <span class="snum">07</span>
+    <h2>Inversión</h2>
+
+    <h4>Referencia de valor</h4>
+    <div class="tscroll">
+      <table>
+        <thead><tr><th>Corte</th><th class="num" style="width:86px;">Esfuerzo</th><th class="num" style="width:180px;">Valor de mercado</th></tr></thead>
+        <tbody>
+          <tr><td>C1 — Administración de grupos</td><td class="num">34 h</td><td class="num">$1.020.000</td></tr>
+          <tr><td>C2 — Visibilidad y ficha grupal</td><td class="num">30 h</td><td class="num">$900.000</td></tr>
+          <tr class="subrow"><td>Subtotal facturable</td><td class="num">64 h</td><td class="num">$1.920.000</td></tr>
+          <tr class="freerow"><td>Estabilización y pruebas de regresión</td><td class="num">12 h</td><td class="num"><s>$360.000</s> &nbsp;<span class="pill p-hi">No se cobra</span></td></tr>
+          <tr class="totrow"><td>Total entregado</td><td class="num">76 h</td><td class="num">$2.280.000</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="font-size:14px;color:var(--muted);">Tarifa de referencia: $30.000 / hora.</p>
+
+    <div class="gauge-block">
+      <p class="gauge-cap">Dónde queda tu valor frente al de mercado</p>
+      <div class="gauge">
+        <div class="gmark" style="left:35%;">
+          <b>$680.000 — tu valor</b>
+          <s></s>
+        </div>
+        <div class="gbar">
+          <i style="width:40%;background:var(--hi);"></i>
+          <i style="width:30%;background:var(--mid);"></i>
+          <i style="width:30%;background:var(--lo);"></i>
+        </div>
+        <div class="gticks">
+          <span>$0</span>
+          <span>$960.000</span>
+          <span>$1.920.000</span>
+        </div>
+        <div class="glabels">
+          <span style="width:40%;">Tarifa aliado</span>
+          <span style="width:30%;">Tarifa reducida</span>
+          <span style="width:30%;">Tarifa de mercado</span>
+        </div>
+      </div>
+    </div>
+
+    <h4>Valor acordado</h4>
+    <div class="price">
+      <div class="price-fig">$680.000<sup>COP</sup></div>
+      <div class="price-side"><b>65% de descuento</b> sobre el trabajo facturable. Contando la estabilización que no se cobra, el descuento real es del <b>70%</b>.</div>
+    </div>
+
+    <h4>Forma de pago — 2 cuotas</h4>
+    <p style="font-size:15px;color:var(--ink-2);">Con dos cortes y tres semanas no hay un hito intermedio que justifique una tercera cuota, así que el pago se simplifica.</p>
+    <div class="cuotas dos">
+      <div class="cuota first">
+        <p class="cwhen">1 · Anticipo</p>
+        <div><span class="camt">$272.000</span><span class="cpct">40%</span></div>
+        <p class="cdesc"><strong>Antes de iniciar.</strong> Reserva la agenda de desarrollo.</p>
+      </div>
+      <div class="cuota">
+        <p class="cwhen">2 · Entrega</p>
+        <div><span class="camt">$408.000</span><span class="cpct">60%</span></div>
+        <p class="cdesc">Al cierre de <strong>C2</strong> + estabilización: desplegado y capacitado.</p>
+      </div>
+    </div>
+
+    <div class="note">
+      <p><strong>Sobre el anticipo:</strong> es la única condición nueva, y es la que hace viable el compromiso. El desarrollo <strong>no se agenda</strong> sin él. Es lo que garantiza que las semanas queden bloqueadas para este proyecto, y no compitiendo con otros. Aun subiendo al 40%, <strong>el primer pago en pesos es menor</strong> que en un esquema de tres cuotas sobre un alcance mayor.</p>
+    </div>
+
+    <h4>Comparación con la Fase 1</h4>
+    <div class="tscroll">
+      <table>
+        <thead><tr><th></th><th class="num" style="width:150px;">Fase 1</th><th class="num" style="width:200px;">Fase 2</th></tr></thead>
+        <tbody>
+          <tr><td>Valor de mercado</td><td class="num">~$3.000.000</td><td class="num">~$2.280.000</td></tr>
+          <tr><td>Valor acordado</td><td class="num">$800.000</td><td class="num"><strong style="font-size:17px;">$680.000</strong></td></tr>
+          <tr><td>Forma de pago</td><td class="num">3 cuotas</td><td class="num">2 cuotas</td></tr>
+          <tr><td>Anticipo</td><td class="num">—</td><td class="num"><strong>40% al inicio</strong></td></tr>
+          <tr><td>Riesgo sobre lo existente</td><td class="num">Ninguno</td><td class="num" style="color:var(--mid);">Alto</td></tr>
+          <tr><td>Estabilización</td><td class="num">Cobrada</td><td class="num" style="color:var(--hi);font-weight:600;">Incluida sin costo</td></tr>
+          <tr><td>Soporte incluido</td><td class="num">2 meses</td><td class="num">1 mes + garantía de no-regresión</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note">
+      <p style="font-size:17px;color:var(--ink);"><strong>El precio baja porque baja el alcance, no la dedicación.</strong> Esta fase entrega dos cortes en lugar de cinco, y por eso cuesta menos que la Fase 1. La tarifa preferencial es la misma; lo que cambia es cuánto trabajo se contrata de una vez.</p>
+    </div>
+  </section>
+
+  <!-- 08 -->
+  <section id="s8">
+    <span class="snum">08</span>
+    <h2>Condiciones</h2>
+    <ol class="cond">
+      <li><strong>Inicio.</strong> El cronograma corre desde que se cumplen las dos cosas: anticipo del 40% recibido <em>y</em> material entregado (sección 09).</li>
+      <li><strong>Retroalimentación por corte.</strong> 5 días hábiles para revisar cada entrega. Pasado ese plazo sin comentarios, el corte se da por aprobado.</li>
+      <li><strong>Rondas de ajuste.</strong> 2 incluidas por corte. Ajustes adicionales, o cambios dentro de un corte ya aprobado, se cotizan aparte.</li>
+      <li><strong>Cambios de alcance.</strong> Cualquier funcionalidad de las secciones 05 y 06 se cotiza y se acuerda por escrito antes de ejecutarse.</li>
+      <li><strong>Pagos.</strong> Un atraso mayor a 10 días calendario pausa el desarrollo hasta regularizar. La agenda se reprograma según disponibilidad.</li>
+      <li><strong>Soporte.</strong> 1 mes posterior a la entrega para errores de lo desarrollado en Fase 2. Durante ese mes también se cubre sin costo cualquier fallo en funciones de Fase 1 causado por los cambios de Fase 2.</li>
+      <li><strong>Infraestructura.</strong> Dominio, base de datos, almacenamiento y hosting los asume el cliente. Los límites de la sección 03 están dimensionados para el plan económico.</li>
+      <li><strong>Datos personales.</strong> El cliente es responsable de las autorizaciones de tratamiento de datos y de imagen, especialmente de menores. La matriz de visibilidad es la herramienta técnica para cumplirlas; la responsabilidad legal es del centro.</li>
+      <li><strong>Vigencia.</strong> 30 días desde la fecha del documento.</li>
+    </ol>
+  </section>
+
+  <!-- 09 -->
+  <section id="s9">
+    <span class="snum">09</span>
+    <h2>Qué necesito para arrancar</h2>
+    <p class="lede">Sin esto, el corte C1 no puede cerrarse.</p>
+    <ul class="check">
+      <li><strong>Lista de grupos</strong> que existen hoy y cuáles deben quedar activos.</li>
+      <li><strong>Tipos de grupo y sedes</strong> iniciales — confirmar si “Garzón” es sede o significa otra cosa.</li>
+      <li><strong>Decisión sobre la matriz de visibilidad.</strong> Especialmente: ¿el dueño del grupo ve el % de grasa individual de sus deportistas, o solo el promedio del grupo?</li>
+      <li><strong>Confirmación de los límites de plan</strong> de la sección 03.</li>
+      <li><strong>A quién se le entrega el enlace</strong> de cada ficha grupal.</li>
+      <li>Logo y color de cada grupo, si los tienen.</li>
+    </ul>
+
+    <p style="margin-top:26px;"><strong>Cómo iniciamos:</strong> aprobación → abono del 40% (se bloquea la agenda) → sesión de 45 minutos para cerrar esta lista, principalmente la matriz de visibilidad. C1 arranca el mismo día: la migración y el modelo de grupos no dependen de todo el material.</p>
+  </section>
+
+  <footer class="foot">
+    <div>In Move · Propuesta Fase 2 · v2.2</div>
+    <div>Diego Cumbe · 18.09.2026 · vigencia 30 días</div>
+  </footer>
+
+</div>
+
+<script>
+  (function () {
+    var btn = document.getElementById('pdfBtn');
+    var hint = document.getElementById('pdfHint');
+    var hintTimer, hideTimer;
+
+    // Si el navegador confirma que abrió el diálogo, no hace falta la ayuda.
+    window.addEventListener('beforeprint', function () {
+      clearTimeout(hintTimer);
+      hint.hidden = true;
+    });
+
+    btn.addEventListener('click', function () {
+      clearTimeout(hintTimer);
+      clearTimeout(hideTimer);
+      hint.hidden = true;
+
+      try { window.print(); } catch (e) { /* el visor puede bloquear el diálogo */ }
+
+      // Algunos visores embebidos ignoran window.print() sin avisar.
+      hintTimer = setTimeout(function () {
+        hint.hidden = false;
+        hideTimer = setTimeout(function () { hint.hidden = true; }, 12000);
+      }, 1200);
+    });
+  })();
+</script>
