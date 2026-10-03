@@ -1,7 +1,6 @@
 'use client';
 
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import {
   Activity,
@@ -36,8 +35,11 @@ import {
   Upload,
   UserRound,
   UsersRound,
+  Users,
   Eye,
   X,
+  Ban,
+  RotateCcw,
 } from 'lucide-react';
 import {
   athletes as initialAthletes,
@@ -56,6 +58,11 @@ import { daysSinceIso, isoToInstant } from '@/lib/date';
 import type { Level } from '@/styles/tokens';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/premium';
+import { AthletePhoto, Avatar, SafetyModal, SectionHeader, defaultAthletePhoto } from '@/components/admin-ui';
+import { GroupsView } from '@/components/groups-view';
+import * as groupApi from '@/lib/group-actions';
+import { DEFAULT_PLAN_LIMITS, type GroupSummary, type PlanLimits } from '@/lib/groups';
+import { DEFAULT_GROUP_PUBLIC_SETTINGS, GROUP_COLUMNS, PUBLIC_IDENTITIES, type GroupColumnKey, type GroupPublicSettings } from '@/lib/group-columns';
 import * as api from '@/lib/actions';
 import { uploadAthletePhoto } from '@/lib/upload';
 import { createClient as createSupabaseClient } from '@/lib/supabase/client';
@@ -68,6 +75,7 @@ import { FICHA_SECTION_KEYS, FICHA_SECTION_LABELS, sectionsForCategory, type Cat
 const viewItems: Array<{ id: ViewId; label: string; icon: typeof UsersRound }> = [
   { id: 'dashboard', label: 'Panel', icon: Home },
   { id: 'athletes', label: 'Deportistas', icon: UsersRound },
+  { id: 'groups', label: 'Grupos', icon: Users },
   { id: 'assessment', label: 'Valoracion', icon: ClipboardList },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
@@ -99,7 +107,6 @@ const demoBodyProfile: Record<string, { weight: number; height: number; notes: s
   maria: { weight: 50.3, height: 158, notes: 'Perfil estable con buena movilidad y resistencia destacada.' },
   juan: { weight: 61.8, height: 170, notes: 'Perfil atleta con alto rendimiento en velocidad y salto.' },
 };
-const defaultAthletePhoto = '/images/default-athlete.svg';
 
 /**
  * Fuentes que el optimizador de Next no puede procesar: las fotos recién elegidas
@@ -107,9 +114,6 @@ const defaultAthletePhoto = '/images/default-athlete.svg';
  * salvo que se active `dangerouslyAllowSVG`. El placeholder pesa 441 B: no hay nada
  * que optimizar en él.
  */
-const isUnoptimizable = (src: string) =>
-  src.startsWith('blob:') || src.startsWith('data:') || src.endsWith('.svg');
-
 type AssessmentDraft = AssessmentDraftInput;
 type SprintDistance = '10' | '20' | '30';
 
@@ -236,6 +240,15 @@ export default function MockMvpApp() {
   const [fichaTheme, setFichaThemeState] = useState<FichaTheme>('light');
   const [fichaSectionsByCategory, setFichaSectionsByCategory] = useState<FichaSectionsConfig>({});
   const [platformTheme, setPlatformTheme] = useState<FichaTheme>('dark');
+  const [groups, setGroups] = useState<GroupSummary[]>([]);
+  const [planLimits, setPlanLimits] = useState<PlanLimits>(DEFAULT_PLAN_LIMITS);
+  const [groupPublicSettings, setGroupPublicSettings] = useState<GroupPublicSettings>(DEFAULT_GROUP_PUBLIC_SETTINGS);
+  const [groupsReady, setGroupsReady] = useState(false);
+  const [catalogOptions, setCatalogOptions] = useState<api.CatalogOption[]>([]);
+  // A dónde vuelve "Volver" desde el detalle del deportista (listado o grupo).
+  const [detailReturnView, setDetailReturnView] = useState<ViewId>('athletes');
+  // Grupo abierto en el módulo Grupos (también al llegar desde el panel o al volver del detalle).
+  const [focusGroupId, setFocusGroupId] = useState<string | null>(null);
 
   // Tema de la plataforma (panel admin): preferencia por dispositivo en localStorage.
   useEffect(() => {
@@ -252,6 +265,7 @@ export default function MockMvpApp() {
         setSettings(data.settings);
         setFichaThemeState(data.fichaTheme);
         setFichaSectionsByCategory(data.fichaSectionsByCategory);
+        applyGroupData(data);
         setSelectedId((current) => current || data.athletes[0]?.id || '');
         setLoading(false);
       })
@@ -272,9 +286,15 @@ export default function MockMvpApp() {
   const currentAssessment = selected?.assessments[0];
   const isPublicView = !isAdmin || publicPreview;
 
+  const [showDisabled, setShowDisabled] = useState(false);
+  // Grupos, panel y rankings solo ven deportistas habilitados.
+  const activeAthletes = useMemo(() => mockAthletes.filter((athlete) => !athlete.disabled), [mockAthletes]);
+  const disabledCount = mockAthletes.length - activeAthletes.length;
+
   const filteredAthletes = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     return mockAthletes.filter((athlete) => {
+      if (Boolean(athlete.disabled) !== showDisabled) return false;
       const matchesCategory = category === 'Todos' || athlete.category === category;
       const matchesQuery =
         normalized.length === 0 ||
@@ -284,7 +304,7 @@ export default function MockMvpApp() {
           .includes(normalized);
       return matchesCategory && matchesQuery;
     });
-  }, [category, mockAthletes, query]);
+  }, [category, mockAthletes, query, showDisabled]);
 
   const categoryOptions = ['Todos', ...settings.categories];
 
@@ -305,6 +325,7 @@ export default function MockMvpApp() {
         position: data.position,
         photoPath,
       });
+      await saveAthleteGroups(athlete.id, data.groupIds);
       setMockAthletes((current) => [athlete, ...current]);
       setSelectedId(athlete.id);
       setPublicAssessment(null);
@@ -323,7 +344,23 @@ export default function MockMvpApp() {
     setSettings(data.settings);
     setFichaThemeState(data.fichaTheme);
     setFichaSectionsByCategory(data.fichaSectionsByCategory);
+    applyGroupData(data);
     router.refresh();
+  }
+
+  function applyGroupData(data: Awaited<ReturnType<typeof api.getInitialData>>) {
+    setGroups(data.groups);
+    setPlanLimits(data.planLimits);
+    setGroupPublicSettings(data.groupPublicSettings);
+    setGroupsReady(data.groupsReady);
+    setCatalogOptions(data.catalogOptions);
+  }
+
+  /** Aplica el selector de grupos del formulario (fuente de verdad: group_members). */
+  async function saveAthleteGroups(athleteId: string, groupIds: string[] | undefined) {
+    if (!groupsReady || !groupIds) return;
+    const problem = await groupApi.setAthleteGroups(athleteId, groupIds);
+    if (problem) alert(problem);
   }
 
   async function changeFichaTheme(theme: FichaTheme) {
@@ -367,6 +404,7 @@ export default function MockMvpApp() {
         position: data.position,
         photoPath,
       });
+      await saveAthleteGroups(athleteId, data.groupIds);
       await reload();
       setEditOpen(false);
     } catch (error) {
@@ -377,7 +415,8 @@ export default function MockMvpApp() {
 
   const detailAthlete = detailId ? mockAthletes.find((a) => a.id === detailId) ?? null : null;
 
-  function openDetail(athlete: Athlete) {
+  function openDetail(athlete: Athlete, returnTo: ViewId = 'athletes') {
+    setDetailReturnView(returnTo);
     setSelectedId(athlete.id);
     setDetailId(athlete.id);
     setPublicPreview(false);
@@ -408,6 +447,19 @@ export default function MockMvpApp() {
     await reload();
   }
 
+  async function toggleAthleteDisabled(athlete: Athlete) {
+    await api.setAthleteDisabled(athlete.id, !athlete.disabled);
+    await reload();
+  }
+
+  /** Borrado lógico con justificación: el deportista y sus fichas se conservan en BD. */
+  async function removeAthlete(athlete: Athlete, reason: string) {
+    await api.deleteAthlete(athlete.id, reason);
+    setDetailId(null);
+    setView('athletes');
+    await reload();
+  }
+
   function updateAthletePhoto(athleteId: string, photoUrl: string) {
     setMockAthletes((current) =>
       current.map((athlete) => (athlete.id === athleteId ? { ...athlete, photoUrl } : athlete)),
@@ -427,7 +479,7 @@ export default function MockMvpApp() {
       <div className="grid min-h-dvh place-items-center bg-background px-4 text-center text-foreground">
         <div className="flex flex-col items-center">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.jpg" alt="In Move" className="size-20 rounded-full object-cover ring-1 ring-border" />
+          <img src="/logo.webp" alt="In Move" className="size-20 rounded-full object-cover ring-1 ring-border" />
           <p className="mt-4 text-2xl font-bold uppercase tracking-[-0.04em]">
             <span className="text-brand">IN</span>MOVE
           </p>
@@ -444,7 +496,7 @@ export default function MockMvpApp() {
           </div>
         </div>
         {isCreateOpen ? (
-          <CreateAthleteModal settings={settings} onClose={() => setIsCreateOpen(false)} onCreate={createAthlete} />
+          <CreateAthleteModal settings={settings} groups={groupsReady ? groups : null} onClose={() => setIsCreateOpen(false)} onCreate={createAthlete} />
         ) : null}
       </div>
     );
@@ -481,6 +533,8 @@ export default function MockMvpApp() {
                     ? 'Valoracion final'
                     : view === 'athletes'
                     ? 'Listado de deportistas'
+                    : view === 'groups'
+                    ? 'Grupos'
                     : view === 'assessment'
                       ? 'Valoracion tablet-first'
                       : view === 'dashboard'
@@ -561,13 +615,19 @@ export default function MockMvpApp() {
                 detailAthlete ? (
                   <AthleteDetailView
                     athlete={detailAthlete}
+                    groupNames={groups.filter((group) => group.memberIds.includes(detailAthlete.id)).map((group) => group.name)}
                     isAdmin={isAdmin}
-                    onBack={() => setDetailId(null)}
+                    onBack={() => {
+                      setDetailId(null);
+                      if (detailReturnView !== 'athletes') setView(detailReturnView);
+                    }}
                     onViewFicha={(assessment) => viewFicha(detailAthlete, assessment)}
                     onEditInfo={() => setEditOpen(true)}
                     onNewFicha={() => startNewFicha(detailAthlete)}
                     onEditFicha={(assessment) => editFicha(detailAthlete, assessment)}
                     onDeleteFicha={deleteFicha}
+                    onToggleDisabled={() => toggleAthleteDisabled(detailAthlete)}
+                    onDeleteAthlete={(reason) => removeAthlete(detailAthlete, reason)}
                   />
                 ) : (
                   <AthletesTable
@@ -577,8 +637,11 @@ export default function MockMvpApp() {
                     category={category}
                     onQuery={setQuery}
                     onCategory={setCategory}
+                    showDisabled={showDisabled}
+                    disabledCount={disabledCount}
+                    onShowDisabled={setShowDisabled}
                     onCreate={() => setIsCreateOpen(true)}
-                    onOpen={openDetail}
+                    onOpen={(athlete) => openDetail(athlete)}
                   />
                 )
               ) : view === 'assessment' ? (
@@ -599,8 +662,30 @@ export default function MockMvpApp() {
                     setPublicPreview(true);
                   }}
                 />
+              ) : view === 'groups' ? (
+                <GroupsView
+                  groups={groups}
+                  athletes={activeAthletes}
+                  catalogOptions={catalogOptions}
+                  planLimits={planLimits}
+                  tableSettings={groupPublicSettings}
+                  groupsReady={groupsReady}
+                  initialGroupId={focusGroupId}
+                  onSelectGroup={setFocusGroupId}
+                  onOpenAthlete={(athlete) => openDetail(athlete, 'groups')}
+                  onReload={reload}
+                />
               ) : view === 'dashboard' ? (
-                <DashboardView athletes={mockAthletes} />
+                <DashboardView
+                  athletes={activeAthletes}
+                  categories={settings.categories}
+                  groups={groupsReady ? groups : []}
+                  onOpenGroup={(groupId) => {
+                    setFocusGroupId(groupId);
+                    setView('groups');
+                  }}
+                  onOpenAthlete={(athlete) => openDetail(athlete, 'dashboard')}
+                />
               ) : view === 'settings' ? (
                 <SettingsView
                   settings={settings}
@@ -612,13 +697,17 @@ export default function MockMvpApp() {
                   fichaSectionsByCategory={fichaSectionsByCategory}
                   onFichaSections={changeFichaSections}
                   sampleFichaId={mockAthletes.find((a) => a.assessments.some((s) => s.id))?.assessments.find((s) => s.id)?.id}
+                  groups={groupsReady ? groups : null}
+                  onManageGroups={() => setView('groups')}
+                  planLimits={planLimits}
+                  groupPublicSettings={groupPublicSettings}
                 />
               ) : null}
             </main>
           </PullToRefresh>
 
           {isAdmin ? (
-          <nav className="fixed inset-x-4 bottom-[calc(var(--safe-bottom)+1rem)] z-40 grid grid-cols-3 gap-2 rounded-[999px] border border-white/10 bg-surface/90 p-2 shadow-float backdrop-blur xl:hidden print:hidden">
+          <nav className="fixed inset-x-4 bottom-[calc(var(--safe-bottom)+1rem)] z-40 grid grid-cols-5 gap-1 rounded-[999px] border border-white/10 bg-surface/90 p-2 shadow-float backdrop-blur xl:hidden print:hidden">
             {viewItems.map((item) => {
               const Icon = item.icon;
               const active = view === item.id;
@@ -635,7 +724,7 @@ export default function MockMvpApp() {
                   }`}
                 >
                   <Icon className="size-4" />
-                  <span className="hidden min-[390px]:inline">{item.label}</span>
+                  <span className="hidden sm:inline">{item.label}</span>
                 </button>
               );
             })}
@@ -645,12 +734,13 @@ export default function MockMvpApp() {
       </div>
 
       {isCreateOpen ? (
-        <CreateAthleteModal settings={settings} onClose={() => setIsCreateOpen(false)} onCreate={createAthlete} />
+        <CreateAthleteModal settings={settings} groups={groupsReady ? groups : null} onClose={() => setIsCreateOpen(false)} onCreate={createAthlete} />
       ) : null}
 
       {editOpen && detailAthlete ? (
         <CreateAthleteModal
           settings={settings}
+          groups={groupsReady ? groups : null}
           initial={detailAthlete}
           title="Editar información"
           submitLabel="Guardar cambios"
@@ -743,7 +833,7 @@ function BrandBlock() {
   return (
     <div className="mb-8 flex items-center gap-3 px-2">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/logo.jpg" alt="In Move" className="size-11 shrink-0 rounded-full object-cover ring-1 ring-border" />
+      <img src="/logo.webp" alt="In Move" className="size-11 shrink-0 rounded-full object-cover ring-1 ring-border" />
       <div>
         <p className="text-2xl font-bold uppercase tracking-[-0.04em] leading-none">
           <span className="text-brand">IN</span>MOVE
@@ -803,6 +893,9 @@ function AthletesTable({
   category,
   onQuery,
   onCategory,
+  showDisabled,
+  disabledCount,
+  onShowDisabled,
   onCreate,
   onOpen,
 }: {
@@ -812,6 +905,9 @@ function AthletesTable({
   category: string;
   onQuery: (query: string) => void;
   onCategory: (category: string) => void;
+  showDisabled: boolean;
+  disabledCount: number;
+  onShowDisabled: (show: boolean) => void;
   onCreate: () => void;
   onOpen: (athlete: Athlete) => void;
 }) {
@@ -819,8 +915,10 @@ function AthletesTable({
     <section className="surface-1 rounded-lg p-4 md:p-5">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <p className="text-sm font-medium text-muted-foreground">{visibleAthletes.length} deportistas</p>
-          <h2 className="text-xl font-semibold">Listado de deportistas</h2>
+          <p className="text-sm font-medium text-muted-foreground">
+            {visibleAthletes.length} deportistas{showDisabled ? ' inhabilitados' : ''}
+          </p>
+          <h2 className="text-xl font-semibold">{showDisabled ? 'Deportistas inhabilitados' : 'Listado de deportistas'}</h2>
         </div>
         <Button onClick={onCreate}>
           <UserRound />
@@ -828,7 +926,7 @@ function AthletesTable({
         </Button>
       </div>
 
-      <div className="mt-5 grid gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
+      <div className="mt-5 grid gap-3 md:grid-cols-[minmax(0,1fr)_220px_220px]">
         <label className="flex h-12 items-center gap-3 rounded-sm border border-border bg-background px-3">
           <Search className="size-5 text-muted-foreground" />
           <input
@@ -850,6 +948,18 @@ function AthletesTable({
                 {groupName}
               </option>
             ))}
+          </select>
+        </div>
+        <div className="flex h-12 items-center gap-2 rounded-sm border border-border bg-background px-3">
+          <Ban className="size-5 text-muted-foreground" />
+          <select
+            value={showDisabled ? 'disabled' : 'active'}
+            onChange={(event) => onShowDisabled(event.target.value === 'disabled')}
+            aria-label="Filtrar por estado"
+            className="min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none"
+          >
+            <option value="active" className="bg-surface text-foreground">Habilitados</option>
+            <option value="disabled" className="bg-surface text-foreground">Inhabilitados ({disabledCount})</option>
           </select>
         </div>
       </div>
@@ -881,14 +991,20 @@ function AthletesTable({
                       <Avatar name={athlete.name} photoUrl={athlete.photoUrl} />
                       <div className="min-w-0">
                         <p className="truncate font-semibold">{athlete.name}</p>
-                        <p className="truncate text-xs text-muted-foreground">{athlete.sport} · {athlete.position}</p>
+                        <p className="truncate text-xs text-muted-foreground">{[athlete.sport, athlete.position].filter(Boolean).join(' · ')}</p>
                       </div>
                     </div>
                   </td>
                   <td className="px-3 py-3 font-mono text-xs tracking-[0.14em] text-brand">{athlete.code}</td>
-                  <td className="px-3 py-3 text-muted-foreground">{athlete.category}{athlete.group ? ` · ${athlete.group}` : ''}</td>
+                  <td className="px-3 py-3 text-muted-foreground">{[athlete.category, athlete.group].filter(Boolean).join(' · ') || '—'}</td>
                   <td className="px-3 py-3 text-muted-foreground">{latest ? formatDate(latest.date) : 'Sin ficha'}</td>
-                  <td className="px-3 py-3"><StatusBadge level={athlete.status} label={athlete.statusLabel} size="sm" /></td>
+                  <td className="px-3 py-3">
+                    {athlete.disabled ? (
+                      <span className="rounded-pill border border-border px-2.5 py-1 text-xs font-semibold text-muted-foreground">Inhabilitado</span>
+                    ) : (
+                      <StatusBadge level={athlete.status} label={athlete.statusLabel} size="sm" />
+                    )}
+                  </td>
                   <td className="px-3 py-3 text-right">
                     <span className="inline-flex items-center gap-1 text-sm font-semibold text-brand">
                       Ver <ChevronRight className="size-4" />
@@ -900,7 +1016,7 @@ function AthletesTable({
             {visibleAthletes.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-3 py-10 text-center text-muted-foreground">
-                  No hay deportistas que coincidan con la búsqueda.
+                  {showDisabled ? 'No hay deportistas inhabilitados.' : 'No hay deportistas que coincidan con la búsqueda.'}
                 </td>
               </tr>
             ) : null}
@@ -920,8 +1036,13 @@ function AthleteDetailView({
   onNewFicha,
   onEditFicha,
   onDeleteFicha,
+  onToggleDisabled,
+  onDeleteAthlete,
+  groupNames,
 }: {
   athlete: Athlete;
+  /** Grupos reales del deportista (Fase 2); si no hay, se muestra el texto legado. */
+  groupNames?: string[];
   isAdmin: boolean;
   onBack: () => void;
   onViewFicha: (assessment: Assessment) => void;
@@ -929,7 +1050,11 @@ function AthleteDetailView({
   onNewFicha: () => void;
   onEditFicha: (assessment: Assessment) => void;
   onDeleteFicha: (assessment: Assessment, reason: string) => Promise<void>;
+  onToggleDisabled: () => Promise<void>;
+  onDeleteAthlete: (reason: string) => Promise<void>;
 }) {
+  const [danger, setDanger] = useState<'disable' | 'delete' | null>(null);
+  const [togglingDisabled, setTogglingDisabled] = useState(false);
   const fichas = athlete.assessments.filter((a) => a.id);
   const latest = fichas[0];
   const [zoom, setZoom] = useState(false);
@@ -965,10 +1090,85 @@ function AthleteDetailView({
                 <FilePlus />
                 Generar nueva ficha
               </Button>
+              {athlete.disabled ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={togglingDisabled}
+                  onClick={async () => {
+                    setTogglingDisabled(true);
+                    try {
+                      await onToggleDisabled();
+                    } finally {
+                      setTogglingDisabled(false);
+                    }
+                  }}
+                >
+                  <RotateCcw />
+                  Reactivar
+                </Button>
+              ) : (
+                <Button size="sm" variant="outline" onClick={() => setDanger('disable')}>
+                  <Ban />
+                  Inhabilitar
+                </Button>
+              )}
+              <Button size="sm" variant="outline" onClick={() => setDanger('delete')} className="text-level-danger hover:border-level-danger/60">
+                <Trash2 />
+                Eliminar
+              </Button>
             </>
           ) : null}
         </div>
       </div>
+
+      {athlete.disabled ? (
+        <div className="flex gap-3 rounded-md border border-level-warning/40 bg-level-warning/10 p-4 text-sm">
+          <Ban className="size-5 shrink-0 text-level-warning" />
+          <p>
+            <strong>Deportista inhabilitado.</strong> No aparece en grupos, rankings ni en el panel. Sus fichas y enlaces se conservan.
+          </p>
+        </div>
+      ) : null}
+
+      {danger === 'disable' ? (
+        <SafetyModal
+          tone="warning"
+          eyebrow="Inhabilitar deportista"
+          title={athlete.name}
+          description="Puedes reactivarlo cuando quieras desde su detalle (filtro Inhabilitados en el listado)."
+          consequences={[
+            'Deja de aparecer en el listado principal, los grupos, los rankings y el panel.',
+            'No cuenta en las fichas grupales públicas.',
+            'Sus fichas, su historial y su enlace de ficha se conservan.',
+          ]}
+          confirmLabel="Inhabilitar deportista"
+          onClose={() => setDanger(null)}
+          onConfirm={async () => {
+            await onToggleDisabled();
+            setDanger(null);
+          }}
+        />
+      ) : null}
+
+      {danger === 'delete' ? (
+        <SafetyModal
+          tone="danger"
+          eyebrow="Eliminar deportista"
+          title={athlete.name}
+          description="Desaparece de la app. Se conserva en la base de datos junto con esta justificación (auditoría). Si solo quieres pausarlo, usa Inhabilitar."
+          consequences={[
+            `Se ocultan sus ${fichas.length} ficha(s) y sus enlaces públicos dejan de abrir.`,
+            'Sale de todos sus grupos (queda en el historial).',
+            'No se puede deshacer desde la app.',
+          ]}
+          reasonPresets={['Registro duplicado', 'Creado por error', 'Ya no asiste al centro', 'Solicitud del acudiente']}
+          confirmWord={athlete.name}
+          confirmLabel="Eliminar deportista"
+          onClose={() => setDanger(null)}
+          onConfirm={(reason) => onDeleteAthlete(reason)}
+        />
+      ) : null}
 
       <section className="surface-1 rounded-lg p-5">
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
@@ -988,7 +1188,7 @@ function AthleteDetailView({
             </button>
             <div className="min-w-0">
               <p className="truncate text-2xl font-semibold">{athlete.name}</p>
-              <p className="mt-1 text-sm text-muted-foreground">{athlete.category} · {athlete.group} · {athlete.sport} · {athlete.position}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{[athlete.category, groupNames?.length ? groupNames.join(', ') : athlete.group, athlete.sport, athlete.position].filter(Boolean).join(' · ')}</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <StatusBadge level={athlete.status} label={athlete.statusLabel} />
                 <span className="rounded-pill border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground">Codigo {athlete.code}</span>
@@ -1924,7 +2124,108 @@ function AssessmentView({
   );
 }
 
-function DashboardView({ athletes }: { athletes: Athlete[] }) {
+function DashboardView({
+  athletes,
+  categories,
+  groups,
+  onOpenGroup,
+  onOpenAthlete,
+}: {
+  athletes: Athlete[];
+  categories: string[];
+  groups: GroupSummary[];
+  onOpenGroup: (groupId: string) => void;
+  onOpenAthlete: (athlete: Athlete) => void;
+}) {
+  const [category, setCategory] = useState('Todas');
+  const [groupId, setGroupId] = useState('');
+  const selectedGroup = groups.find((group) => group.id === groupId);
+  // Incluye valores que un deportista tenga aunque ya no estén en el catálogo,
+  // para que ningún deportista quede fuera de todos los filtros.
+  const options = Array.from(new Set([...categories, ...athletes.map((athlete) => athlete.category).filter(Boolean)]));
+  const hasUnassigned = athletes.some((athlete) => !athlete.category);
+  const visible = athletes.filter(
+    (athlete) =>
+      (category === 'Todas' ? true : category === '' ? !athlete.category : athlete.category === category) &&
+      (!selectedGroup || selectedGroup.memberIds.includes(athlete.id)),
+  );
+
+  return (
+    <div className="grid gap-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">
+          {category === 'Todas' ? 'Todas las categorias' : category || 'Sin categoria'}
+          {selectedGroup ? ` · ${selectedGroup.name}` : ''} · {visible.length} deportista(s)
+        </p>
+        <div className="flex flex-wrap gap-2">
+        {groups.length > 0 ? (
+          <div className="flex h-12 min-w-[220px] items-center gap-2 rounded-sm border border-border bg-background px-3">
+            <Users className="size-5 text-muted-foreground" />
+            <select
+              value={groupId}
+              onChange={(event) => setGroupId(event.target.value)}
+              aria-label="Filtrar por grupo"
+              className="min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none"
+            >
+              <option value="" className="bg-surface text-foreground">Todos los grupos</option>
+              {groups.map((group) => (
+                <option key={group.id} value={group.id} className="bg-surface text-foreground">
+                  {group.name}{group.status !== 'active' ? ' (inactivo)' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
+        <div className="flex h-12 min-w-[220px] items-center gap-2 rounded-sm border border-border bg-background px-3">
+          <ListFilter className="size-5 text-muted-foreground" />
+          <select
+            value={category}
+            onChange={(event) => setCategory(event.target.value)}
+            aria-label="Filtrar por categoria"
+            className="min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none"
+          >
+            <option value="Todas" className="bg-surface text-foreground">Todas las categorias</option>
+            {options.map((item) => (
+              <option key={item} value={item} className="bg-surface text-foreground">{item}</option>
+            ))}
+            {hasUnassigned ? <option value="" className="bg-surface text-foreground">Sin categoria</option> : null}
+          </select>
+        </div>
+        </div>
+      </div>
+      {visible.length > 0 ? (
+        <DashboardBody
+          athletes={visible}
+          groups={groups}
+          category={category}
+          onCategory={setCategory}
+          onOpenGroup={onOpenGroup}
+          onOpenAthlete={onOpenAthlete}
+        />
+      ) : (
+        <div className="surface-1 rounded-lg p-8 text-center text-sm text-muted-foreground">
+          No hay deportistas con estos filtros.
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DashboardBody({
+  athletes,
+  groups,
+  category,
+  onCategory,
+  onOpenGroup,
+  onOpenAthlete,
+}: {
+  athletes: Athlete[];
+  groups: GroupSummary[];
+  category: string;
+  onCategory: (category: string) => void;
+  onOpenGroup: (groupId: string) => void;
+  onOpenAthlete: (athlete: Athlete) => void;
+}) {
   const topAthletes = [...athletes].sort((a, b) => b.assessments[0].score - a.assessments[0].score);
   const averageScore = Math.round(
     athletes.reduce((total, athlete) => total + athlete.assessments[0].score, 0) / athletes.length,
@@ -1942,11 +2243,11 @@ function DashboardView({ athletes }: { athletes: Athlete[] }) {
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_390px]">
-        <GlobalDistributionCard athletes={athletes} />
+        <GlobalDistributionCard athletes={athletes} groups={groups} category={category} onCategory={onCategory} onOpenGroup={onOpenGroup} />
 
         <div className="surface-1 rounded-lg p-4 md:p-5">
           <SectionHeader eyebrow="Ranking CMJ" title="Top interno" />
-          <RankingList athletes={topAthletes} />
+          <RankingList athletes={topAthletes} onOpenAthlete={onOpenAthlete} />
         </div>
       </section>
 
@@ -2034,8 +2335,8 @@ function PublicAssessmentView({
         ]} />
         <ReportDataCard title="Contexto deportivo" rows={[
           { label: 'Sexo', value: athlete.sex === 'M' ? 'Masculino' : 'Femenino' },
-          { label: 'Deporte', value: athlete.sport },
-          { label: 'Perfil', value: athlete.position },
+          { label: 'Deporte', value: athlete.sport || '—' },
+          { label: 'Perfil', value: athlete.position || '—' },
         ]} />
         <ReportDataCard title="Observaciones" rows={[
           { label: 'Nota', value: profile.notes || 'Sin observaciones registradas' },
@@ -2338,11 +2639,39 @@ function ScaleTableCard({ selected, metric }: { selected: Athlete; metric?: Athl
   );
 }
 
-function GlobalDistributionCard({ athletes }: { athletes: Athlete[] }) {
+function GlobalDistributionCard({
+  athletes,
+  groups: realGroups,
+  category: activeCategory,
+  onCategory,
+  onOpenGroup,
+}: {
+  athletes: Athlete[];
+  groups: GroupSummary[];
+  category: string;
+  onCategory: (category: string) => void;
+  onOpenGroup: (groupId: string) => void;
+}) {
   const categories = Array.from(new Set(athletes.map((athlete) => athlete.category)));
-  const groups = Array.from(new Set(athletes.map((athlete) => athlete.group)));
   const maxCategory = Math.max(...categories.map((category) => athletes.filter((athlete) => athlete.category === category).length), 1);
-  const maxGroup = Math.max(...groups.map((group) => athletes.filter((athlete) => athlete.group === group).length), 1);
+  // Con grupos reales se cuenta por membresía (un deportista puede sumar en varios);
+  // sin ellos, por el texto legado.
+  const groupRows: Array<{ key: string; label: string; count: number }> =
+    realGroups.length > 0
+      ? [
+          ...realGroups.map((group) => ({
+            key: group.id,
+            label: group.name,
+            count: athletes.filter((athlete) => group.memberIds.includes(athlete.id)).length,
+          })),
+          { key: 'none', label: 'Sin grupo', count: athletes.filter((athlete) => !(athlete.groupIds ?? []).length).length },
+        ].filter((row) => row.count > 0)
+      : Array.from(new Set(athletes.map((athlete) => athlete.group))).map((group) => ({
+          key: group,
+          label: group || 'Sin grupo',
+          count: athletes.filter((athlete) => athlete.group === group).length,
+        }));
+  const maxGroup = Math.max(...groupRows.map((row) => row.count), 1);
 
   return (
     <div className="surface-1 rounded-lg p-4 md:p-5">
@@ -2354,7 +2683,15 @@ function GlobalDistributionCard({ athletes }: { athletes: Athlete[] }) {
             {categories.map((category) => {
               const count = athletes.filter((athlete) => athlete.category === category).length;
               return (
-                <DistributionRow key={category} label={category} count={count} max={maxCategory} />
+                <DistributionRow
+                  key={category}
+                  label={category || 'Sin categoría'}
+                  count={count}
+                  max={maxCategory}
+                  active={activeCategory === category}
+                  // Tocar filtra el panel por esa categoría; tocar de nuevo quita el filtro.
+                  onClick={() => onCategory(activeCategory === category ? 'Todas' : category)}
+                />
               );
             })}
           </div>
@@ -2362,12 +2699,16 @@ function GlobalDistributionCard({ athletes }: { athletes: Athlete[] }) {
         <div>
           <p className="mb-3 text-sm font-semibold text-muted-foreground">Por grupo</p>
           <div className="space-y-3">
-            {groups.map((group) => {
-              const count = athletes.filter((athlete) => athlete.group === group).length;
-              return (
-                <DistributionRow key={group} label={group} count={count} max={maxGroup} />
-              );
-            })}
+            {groupRows.map((row) => (
+              <DistributionRow
+                key={row.key}
+                label={row.label}
+                count={row.count}
+                max={maxGroup}
+                // Solo los grupos reales abren el módulo Grupos (el texto legado y "Sin grupo" no).
+                onClick={realGroups.some((group) => group.id === row.key) ? () => onOpenGroup(row.key) : undefined}
+              />
+            ))}
           </div>
         </div>
       </div>
@@ -2375,27 +2716,51 @@ function GlobalDistributionCard({ athletes }: { athletes: Athlete[] }) {
   );
 }
 
-function DistributionRow({ label, count, max }: { label: string; count: number; max: number }) {
-  return (
-    <div className="rounded-md border border-border bg-background/35 p-3">
+function DistributionRow({
+  label,
+  count,
+  max,
+  active = false,
+  onClick,
+}: {
+  label: string;
+  count: number;
+  max: number;
+  active?: boolean;
+  onClick?: () => void;
+}) {
+  const body = (
+    <>
       <div className="mb-2 flex items-center justify-between gap-3">
-        <span className="text-sm font-semibold">{label}</span>
+        <span className="flex items-center gap-1 text-sm font-semibold">
+          {label}
+          {onClick ? <ChevronRight className="size-4 text-muted-foreground" /> : null}
+        </span>
         <span className="tabular text-sm font-bold text-brand">{count}</span>
       </div>
       <div className="h-2 overflow-hidden rounded-sm bg-white/5">
         <div className="h-full rounded-sm bg-brand" style={{ width: `${(count / max) * 100}%` }} />
       </div>
-    </div>
+    </>
+  );
+  const frame = `block w-full rounded-md border bg-background/35 p-3 text-left ${active ? 'border-brand' : 'border-border'}`;
+  return onClick ? (
+    <button type="button" onClick={onClick} className={`${frame} transition hover:border-brand/40`}>
+      {body}
+    </button>
+  ) : (
+    <div className={frame}>{body}</div>
   );
 }
 
-function RankingList({ athletes }: { athletes: Athlete[] }) {
+function RankingList({ athletes, onOpenAthlete }: { athletes: Athlete[]; onOpenAthlete: (athlete: Athlete) => void }) {
   return (
     <div className="space-y-3">
       {athletes.slice(0, 4).map((athlete, index) => (
         <button
           key={athlete.id}
           type="button"
+          onClick={() => onOpenAthlete(athlete)}
           className="flex w-full items-center gap-3 rounded-md border border-border bg-background/35 p-3 text-left transition hover:border-brand/40"
         >
           <span className={`tabular grid size-8 place-items-center rounded-sm text-sm font-bold ${index === 0 ? 'bg-brand/15 text-brand' : 'bg-white/5 text-muted-foreground'}`}>
@@ -2404,7 +2769,7 @@ function RankingList({ athletes }: { athletes: Athlete[] }) {
           <Avatar name={athlete.name} photoUrl={athlete.photoUrl} />
           <div className="min-w-0 flex-1">
             <p className="truncate font-semibold">{athlete.name}</p>
-            <p className="text-sm text-muted-foreground">{athlete.category} · {athlete.group}</p>
+            <p className="text-sm text-muted-foreground">{[athlete.category, athlete.group].filter(Boolean).join(' · ')}</p>
           </div>
           <span className="tabular text-brand">{athlete.assessments[0].metrics.find((metric) => metric.label === 'CMJ')?.value ?? '-'} cm</span>
         </button>
@@ -2606,14 +2971,6 @@ function MiniStat({ label, value, unit }: { label: string; value: string | numbe
   );
 }
 
-function SectionHeader({ eyebrow, title }: { eyebrow: string; title: string }) {
-  return (
-    <div className="mb-4">
-      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand">{eyebrow}</p>
-      <h2 className="mt-1 text-xl font-semibold">{title}</h2>
-    </div>
-  );
-}
 
 type NewAthleteFormData = {
   name: string;
@@ -2626,6 +2983,8 @@ type NewAthleteFormData = {
   position: string;
   photoUrl?: string;
   photoFile?: File | null;
+  /** Grupos seleccionados (Fase 2). undefined = el módulo de grupos no está activo. */
+  groupIds?: string[];
 };
 
 function PhotoCaptureControls({
@@ -2679,6 +3038,7 @@ function PhotoCaptureControls({
 
 function CreateAthleteModal({
   settings,
+  groups,
   initial,
   title = 'Nuevo deportista',
   submitLabel = 'Crear y valorar',
@@ -2686,6 +3046,8 @@ function CreateAthleteModal({
   onCreate,
 }: {
   settings: ProductSettings;
+  /** Grupos reales; null mientras las tablas de Fase 2 no existan (se usa el texto legado). */
+  groups: GroupSummary[] | null;
   initial?: Athlete;
   title?: string;
   submitLabel?: string;
@@ -2697,11 +3059,13 @@ function CreateAthleteModal({
     document: initial?.document ?? '',
     birthDate: initial?.birthDate ?? '2011-01-01',
     sex: initial?.sex ?? 'M',
-    category: initial?.category || settings.categories[0] || 'Personalizado',
-    group: initial?.group || settings.groups[0] || 'General',
-    sport: initial?.sport || settings.sports[0] || 'General',
-    position: initial?.position || settings.positions[0] || 'General',
+    // Sin asignar = vacío. Nunca se rellena con la primera opción del catálogo.
+    category: initial?.category ?? '',
+    group: initial?.group ?? '',
+    sport: initial?.sport ?? '',
+    position: initial?.position ?? '',
     photoUrl: initial?.photoUrl,
+    groupIds: groups ? initial?.groupIds ?? [] : undefined,
   });
   const [fileName, setFileName] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -2769,25 +3133,31 @@ function CreateAthleteModal({
               </select>
             </FormField>
             <FormField label="Categoria">
-              <select value={form.category} onChange={(event) => update('category', event.target.value)} className="field-control">
-                {settings.categories.map((item) => <option key={item} className="bg-surface">{item}</option>)}
-              </select>
+              <CatalogSelect value={form.category} options={settings.categories} onChange={(value) => update('category', value)} />
             </FormField>
-            <FormField label="Grupo">
-              <select value={form.group} onChange={(event) => update('group', event.target.value)} className="field-control">
-                {settings.groups.map((item) => <option key={item} className="bg-surface">{item}</option>)}
-              </select>
-            </FormField>
+            {groups ? null : (
+              <FormField label="Grupo">
+                <CatalogSelect value={form.group} options={settings.groups} onChange={(value) => update('group', value)} />
+              </FormField>
+            )}
             <FormField label="Deporte">
-              <select value={form.sport} onChange={(event) => update('sport', event.target.value)} className="field-control">
-                {settings.sports.map((item) => <option key={item} className="bg-surface">{item}</option>)}
-              </select>
+              <CatalogSelect value={form.sport} options={settings.sports} onChange={(value) => update('sport', value)} />
             </FormField>
             <FormField label="Perfil / posicion">
-              <select value={form.position} onChange={(event) => update('position', event.target.value)} className="field-control">
-                {settings.positions.map((item) => <option key={item} className="bg-surface">{item}</option>)}
-              </select>
+              <CatalogSelect value={form.position} options={settings.positions} onChange={(value) => update('position', value)} />
             </FormField>
+            {groups && form.groupIds ? (
+              <div className="md:col-span-2">
+                <FormField label="Grupos">
+                  <GroupChecklist
+                    groups={groups}
+                    selected={form.groupIds}
+                    legacyText={initial && (initial.groupIds ?? []).length === 0 ? initial.group : ''}
+                    onChange={(groupIds) => update('groupIds', groupIds)}
+                  />
+                </FormField>
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -2813,6 +3183,10 @@ function SettingsView({
   fichaSectionsByCategory,
   onFichaSections,
   sampleFichaId,
+  groups,
+  onManageGroups,
+  planLimits,
+  groupPublicSettings,
 }: {
   settings: ProductSettings;
   onReload: () => Promise<void>;
@@ -2823,6 +3197,11 @@ function SettingsView({
   fichaSectionsByCategory: FichaSectionsConfig;
   onFichaSections: (category: string, sections: FichaSectionKey[]) => Promise<void>;
   sampleFichaId?: string;
+  /** Grupos reales; null mientras las tablas de Fase 2 no existan. */
+  groups: GroupSummary[] | null;
+  onManageGroups: () => void;
+  planLimits: PlanLimits;
+  groupPublicSettings: GroupPublicSettings;
 }) {
   return (
     <div className="grid gap-5">
@@ -2903,13 +3282,263 @@ function SettingsView({
         )}
       </section>
 
-      <div className="grid gap-5 xl:grid-cols-2">
-        <SettingsList title="Categorías" description="Tipos de atención del deportista." kind="category" values={settings.categories} onReload={onReload} />
-        <SettingsList title="Grupos" description="Equipos o cohortes (ej. Running, Cofisam)." kind="group" values={settings.groups} onReload={onReload} />
-        <SettingsList title="Deportes" description="Opciones del perfil del deportista." kind="sport" values={settings.sports} onReload={onReload} />
-        <SettingsList title="Perfiles / posiciones" description="Rol deportivo o enfoque de entrenamiento." kind="position" values={settings.positions} onReload={onReload} />
+      <div>
+        <h2 className="text-lg font-semibold">Flags del deportista</h2>
+        <p className="mb-4 text-sm text-muted-foreground">Una etiqueta por deportista. Renombrar aquí actualiza a todos los deportistas que la tienen.</p>
+        <div className="grid gap-5 xl:grid-cols-2">
+          <SettingsList title="Categorías" description="Tipo de servicio del deportista (una por persona). No es lo mismo que un grupo." kind="category" values={settings.categories} onReload={onReload} />
+          <SettingsList title="Deportes / disciplinas" description="Deporte del deportista. También es la disciplina de los grupos: una sola lista." kind="sport" values={settings.sports} onReload={onReload} />
+          <SettingsList title="Perfiles / posiciones" description="Rol deportivo o enfoque de entrenamiento." kind="position" values={settings.positions} onReload={onReload} />
+          {groups ? null : (
+            <SettingsList title="Grupos" description="Equipos o cohortes (ej. Running, Coofisam)." kind="group" values={settings.groups} onReload={onReload} />
+          )}
+        </div>
       </div>
+
+      {groups ? (
+        <div>
+          <h2 className="text-lg font-semibold">Grupos</h2>
+          <p className="mb-4 text-sm text-muted-foreground">Describen al equipo, no a la persona. Un deportista puede estar en varios grupos.</p>
+          <div className="grid gap-5 xl:grid-cols-2">
+            <GroupsSummaryCard groups={groups} onManage={onManageGroups} />
+            <GroupPublicSettingsCard settings={groupPublicSettings} groups={groups} onReload={onReload} />
+            {planLimits.enabled ? <PlanLimitsCard limits={planLimits} activeGroups={groups.filter((group) => group.status === 'active').length} onReload={onReload} /> : null}
+            <SettingsList title="Sedes" description="Ciudad o sede del grupo (ej. Garzón). Abrir una sede nueva no requiere tocar código." kind="sede" values={settings.sedes} onReload={onReload} />
+            <SettingsList title="Modalidades" description="Presencial, remoto, mixto…" kind="modalidad" values={settings.modalidades} onReload={onReload} />
+          </div>
+        </div>
+      ) : null}
     </div>
+  );
+}
+
+/**
+ * Tabla general de los grupos (app_settings.group_public_view): en qué grupos
+ * se activa, qué indicadores ve el admin y cuáles publica el enlace del
+ * responsable. Los nombres en el enlace público van apagados por defecto.
+ */
+function GroupPublicSettingsCard({
+  settings,
+  groups,
+  onReload,
+}: {
+  settings: GroupPublicSettings;
+  groups: GroupSummary[];
+  onReload: () => Promise<void>;
+}) {
+  const [draft, setDraft] = useState(settings);
+  const [saving, setSaving] = useState(false);
+  const changed = JSON.stringify(draft) !== JSON.stringify(settings);
+  const visibleGroups = groups.filter((group) => group.status !== 'archived');
+
+  type ColumnList = 'columns' | 'adminColumns';
+  function toggleColumn(list: ColumnList, key: GroupColumnKey) {
+    const current = draft[list];
+    const next = current.includes(key) ? current.filter((item) => item !== key) : [...current, key];
+    // Mantener el orden de las columnas de la tabla.
+    setDraft({ ...draft, [list]: GROUP_COLUMNS.map((column) => column.key).filter((item) => next.includes(item)) });
+  }
+
+  function toggleGroup(groupId: string) {
+    const excluded = draft.excludedGroupIds.includes(groupId)
+      ? draft.excludedGroupIds.filter((id) => id !== groupId)
+      : [...draft.excludedGroupIds, groupId];
+    setDraft({ ...draft, excludedGroupIds: excluded });
+  }
+
+  async function save() {
+    setSaving(true);
+    try {
+      const problem = await groupApi.setGroupPublicSettings(draft);
+      if (problem) alert(problem);
+      await onReload();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const chip = (on: boolean) =>
+    `h-9 rounded-pill border px-3 text-sm font-semibold transition ${
+      on ? 'border-brand bg-brand/10 text-brand' : 'border-border text-muted-foreground hover:border-brand/40'
+    }`;
+
+  const columnPicker = (list: ColumnList) => (
+    <div className="flex flex-wrap gap-2">
+      {GROUP_COLUMNS.map((column) => {
+        const on = draft[list].includes(column.key);
+        return (
+          <button key={column.key} type="button" onClick={() => toggleColumn(list, column.key)} className={chip(on)}>
+            {on ? '✓ ' : ''}{column.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  return (
+    <section className="surface-1 rounded-lg p-4 md:p-5 xl:col-span-2">
+      <SectionHeader eyebrow="Módulo Grupos" title="Tabla general de grupos" />
+      <p className="-mt-2 mb-4 text-sm text-muted-foreground">
+        La tabla con los valores de cada deportista y su escala de color. Elige en qué grupos se activa y qué indicadores
+        se ven en el panel y en el enlace público del responsable.
+      </p>
+
+      <p className="mb-2 text-sm font-semibold">Grupos con tabla general y ranking</p>
+      {visibleGroups.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Aún no hay grupos.</p>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {visibleGroups.map((group) => {
+            const on = !draft.excludedGroupIds.includes(group.id);
+            return (
+              <button key={group.id} type="button" onClick={() => toggleGroup(group.id)} className={chip(on)}>
+                {on ? '✓ ' : ''}{group.name}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      <p className="mt-2 text-xs text-muted-foreground">
+        Desactivado: el panel muestra solo la lista de deportistas y el enlace público no lleva ranking (los promedios siguen).
+        Los grupos nuevos quedan activados.
+      </p>
+
+      <div className="mt-5 grid gap-5 lg:grid-cols-2">
+        <div>
+          <p className="mb-2 text-sm font-semibold">Indicadores en el panel (admin)</p>
+          {columnPicker('adminColumns')}
+        </div>
+        <div>
+          <p className="mb-2 text-sm font-semibold">Indicadores en el enlace público</p>
+          {columnPicker('columns')}
+          <p className="mt-2 text-xs text-muted-foreground">
+            Aplica al ranking, los promedios, el semáforo y la evolución. % grasa, % masa, IMC y FC reposo vienen apagados:
+            son medidas corporales y de salud.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-5 rounded-md border border-border p-3">
+        <p className="text-sm font-semibold">Cómo se identifica a cada deportista en el ranking público</p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {PUBLIC_IDENTITIES.map((option) => (
+            <button
+              key={option.key}
+              type="button"
+              onClick={() => setDraft({ ...draft, identity: option.key })}
+              className={chip(draft.identity === option.key)}
+            >
+              {draft.identity === option.key ? '✓ ' : ''}{option.label}
+            </button>
+          ))}
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          {draft.identity === 'none'
+            ? 'El ranking sale anónimo: posición y valores, sin nombre ni foto.'
+            : 'Quien tenga el enlace podrá identificar a cada deportista junto a sus valores. Confirma que los acudientes lo autorizaron.'}
+        </p>
+      </div>
+
+      <div className="mt-4 flex gap-2">
+        <Button type="button" onClick={save} disabled={!changed || saving}>
+          {saving ? 'Guardando…' : 'Guardar'}
+        </Button>
+        {changed ? (
+          <Button type="button" variant="outline" onClick={() => setDraft(settings)} disabled={saving}>
+            Descartar
+          </Button>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Límites del plan (propuesta §3), guardados en app_settings.plan_limits.
+ * El cupo propio de un grupo nunca puede superar el límite por grupo.
+ */
+function PlanLimitsCard({ limits, activeGroups, onReload }: { limits: PlanLimits; activeGroups: number; onReload: () => Promise<void> }) {
+  const [draft, setDraft] = useState(limits);
+  const [saving, setSaving] = useState(false);
+  const changed = (Object.keys(limits) as Array<keyof PlanLimits>).some((key) => draft[key] !== limits[key]);
+  const fields: Array<{ key: Exclude<keyof PlanLimits, 'enabled'>; label: string; hint: string }> = [
+    { key: 'maxActiveGroups', label: 'Grupos activos', hint: `En uso: ${activeGroups}` },
+    { key: 'maxMembersPerGroup', label: 'Deportistas por grupo', hint: 'Tope para todos los grupos' },
+    { key: 'maxPhotoMb', label: 'Peso máximo por foto (MB)', hint: 'Referencia de almacenamiento' },
+    { key: 'rankingRetention', label: 'Retención de periodos', hint: 'Histórico de cortes (Fase 3)' },
+  ];
+
+  async function save() {
+    setSaving(true);
+    try {
+      const problem = await groupApi.setPlanLimits(draft);
+      if (problem) alert(problem);
+      await onReload();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="surface-1 rounded-lg p-4 md:p-5">
+      <SectionHeader eyebrow="Control de costo" title="Límites del plan" />
+      <p className="-mt-2 mb-4 text-sm text-muted-foreground">
+        Aviso al 80% de uso y bloqueo al 100%. No se borra nada automáticamente. El cupo propio de cada grupo (en Editar grupo) no puede superar el tope por grupo.
+      </p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {fields.map((field) => (
+          <label key={field.key} className="block">
+            <span className="mb-1 block text-sm font-semibold text-muted-foreground">{field.label}</span>
+            <input
+              type="number"
+              min={1}
+              value={draft[field.key]}
+              onChange={(event) => setDraft({ ...draft, [field.key]: Number(event.target.value) })}
+              className="field-control"
+            />
+            <span className="mt-1 block text-xs text-muted-foreground">{field.hint}</span>
+          </label>
+        ))}
+      </div>
+      <div className="mt-4 flex gap-2">
+        <Button type="button" onClick={save} disabled={!changed || saving}>
+          {saving ? 'Guardando…' : 'Guardar límites'}
+        </Button>
+        {changed ? (
+          <Button type="button" variant="outline" onClick={() => setDraft(limits)} disabled={saving}>
+            Descartar
+          </Button>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+/** Grupos en solo lectura: se administran en el módulo Grupos (entidad con cupo, miembros e histórico). */
+function GroupsSummaryCard({ groups, onManage }: { groups: GroupSummary[]; onManage: () => void }) {
+  return (
+    <section className="surface-1 rounded-lg p-4 md:p-5">
+      <SectionHeader eyebrow="Módulo" title="Grupos" />
+      <p className="-mt-2 mb-4 text-sm text-muted-foreground">
+        Los grupos se crean, renombran y archivan desde el módulo Grupos, para que ningún deportista quede con un nombre viejo.
+      </p>
+      <div className="space-y-2">
+        {groups.map((group) => (
+          <div key={group.id} className="flex min-h-12 items-center gap-3 rounded-md border border-border bg-background/35 px-3">
+            <span className="size-2.5 shrink-0 rounded-full" style={{ background: group.color ?? 'hsl(var(--brand))' }} />
+            <span className="min-w-0 flex-1 truncate text-sm font-semibold">{group.name}</span>
+            <span className="tabular text-xs text-muted-foreground">
+              {group.memberIds.length} deportista(s){group.status !== 'active' ? ' · inactivo' : ''}
+            </span>
+          </div>
+        ))}
+        {groups.length === 0 ? <p className="text-sm text-muted-foreground">Aún no hay grupos.</p> : null}
+      </div>
+      <Button type="button" variant="outline" className="mt-4" onClick={onManage}>
+        <Users />
+        Administrar grupos
+      </Button>
+    </section>
   );
 }
 
@@ -2977,10 +3606,11 @@ function SettingsList({
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
 
-  async function run(op: Promise<unknown>) {
+  async function run(op: Promise<string | null>) {
     setBusy(true);
     try {
-      await op;
+      const problem = await op;
+      if (problem) alert(problem);
       await onReload();
     } catch (error) {
       console.error(error);
@@ -3069,6 +3699,81 @@ function CatalogRow({
   );
 }
 
+/**
+ * Selector múltiple de grupos. Separado de la categoría a propósito: la categoría
+ * es el tipo de servicio (una), los grupos son equipos (cero o más).
+ */
+function GroupChecklist({
+  groups,
+  selected,
+  legacyText,
+  onChange,
+}: {
+  groups: GroupSummary[];
+  selected: string[];
+  /** Texto de grupo anterior a Fase 2 que no tiene grupo real (ej. "Libre"). */
+  legacyText: string;
+  onChange: (groupIds: string[]) => void;
+}) {
+  // Activos, más los inactivos a los que ya pertenece (para poder retirarlo).
+  const options = groups.filter((group) => group.status === 'active' || selected.includes(group.id));
+  const toggle = (id: string) => onChange(selected.includes(id) ? selected.filter((item) => item !== id) : [...selected, id]);
+
+  return (
+    <div>
+      <div className="flex flex-wrap gap-2">
+        {options.map((group) => {
+          const checked = selected.includes(group.id);
+          return (
+            <button
+              key={group.id}
+              type="button"
+              onClick={() => toggle(group.id)}
+              aria-pressed={checked}
+              className={`flex h-11 items-center gap-2 rounded-md border px-3 text-sm font-semibold transition ${
+                checked ? 'border-brand bg-brand/10 text-foreground' : 'border-border text-muted-foreground hover:border-brand/40'
+              }`}
+            >
+              <span className="size-2.5 rounded-full" style={{ background: group.color ?? 'hsl(var(--brand))' }} />
+              {group.name}
+              {checked ? <Check className="size-4 text-brand" /> : null}
+            </button>
+          );
+        })}
+        {options.length === 0 ? <p className="text-sm text-muted-foreground">No hay grupos activos. Créalos en el módulo Grupos.</p> : null}
+      </div>
+      <p className="mt-2 text-xs text-muted-foreground">
+        {selected.length === 0 ? 'Sin grupo.' : `${selected.length} grupo(s).`}
+        {legacyText ? ` Grupo anterior en texto: "${legacyText}" (no es un grupo real; se conserva hasta que asignes uno).` : ''}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Selector de catálogo que muestra la verdad: vacío si no hay nada asignado, y
+ * el valor guardado aunque ya no exista en el catálogo (p. ej. tras un renombre),
+ * en vez de que el navegador enseñe la primera opción como si estuviera elegida.
+ */
+function CatalogSelect({
+  value,
+  options,
+  onChange,
+}: {
+  value: string;
+  options: string[];
+  onChange: (value: string) => void;
+}) {
+  const orphan = value && !options.includes(value) ? value : null;
+  return (
+    <select value={value} onChange={(event) => onChange(event.target.value)} className="field-control">
+      <option value="" className="bg-surface">Sin asignar</option>
+      {orphan ? <option value={orphan} className="bg-surface">{orphan} (no está en el catálogo)</option> : null}
+      {options.map((item) => <option key={item} value={item} className="bg-surface">{item}</option>)}
+    </select>
+  );
+}
+
 function FormField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
@@ -3078,55 +3783,3 @@ function FormField({ label, children }: { label: string; children: React.ReactNo
   );
 }
 
-/**
- * Foto de deportista servida por el optimizador de Next: la original de Supabase
- * pesa ~2 MB y aquí baja a unos pocos KB en WebP al tamaño real de pantalla.
- * Las previsualizaciones locales (blob:/data:) no se pueden optimizar y caen a <img>.
- */
-function AthletePhoto({
-  src,
-  alt,
-  width,
-  height,
-  className,
-  priority = false,
-}: {
-  src: string;
-  alt: string;
-  width: number;
-  height: number;
-  className: string;
-  priority?: boolean;
-}) {
-  if (isUnoptimizable(src)) {
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img src={src} alt={alt} className={className} loading="lazy" decoding="async" />;
-  }
-  // Sin `sizes` a propósito: con él Next asume una imagen fluida y arma el srcset
-  // con `deviceSizes` (640 px como mínimo, ~70 KB). Omitiéndolo usa `imageSizes` y
-  // genera solo 1x/2x del tamaño real — 48 y 96 px para un avatar.
-  return (
-    <Image
-      src={src}
-      alt={alt}
-      width={width}
-      height={height}
-      quality={70}
-      priority={priority}
-      className={className}
-    />
-  );
-}
-
-function Avatar({ name, photoUrl, size = 'md' }: { name: string; photoUrl?: string; size?: 'md' | 'lg' }) {
-  const px = size === 'lg' ? 64 : 48;
-  return (
-    <AthletePhoto
-      src={photoUrl ?? defaultAthletePhoto}
-      alt={name}
-      width={px}
-      height={px}
-      className={`${size === 'lg' ? 'size-16' : 'size-12'} shrink-0 rounded-md object-cover ring-1 ring-brand/20`}
-    />
-  );
-}

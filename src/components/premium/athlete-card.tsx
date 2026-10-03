@@ -2,6 +2,7 @@ import * as React from 'react';
 import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { GlassCard } from './glass-card';
+import { AthletePhoto } from '@/components/admin-ui';
 
 /**
  * AthleteCard — deportista en listados, histórico y rankings.
@@ -56,10 +57,11 @@ export function AthleteCard({
 
       <div className="relative size-[3.25rem] shrink-0">
         {photoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <AthletePhoto
             src={photoUrl}
             alt={name}
+            width={52}
+            height={52}
             className="size-full rounded-xl object-cover ring-1 ring-white/10"
           />
         ) : (

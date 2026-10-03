@@ -1,15 +1,18 @@
 'use server';
 
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '@/db';
-import { athletes, assessments, catalogItems, appSettings } from '@/db/schema';
-import { buildAssessment, deriveStatus } from '@/lib/scales';
-import { emptyAssessment, generateCode } from '@/lib/mock-product';
+import type { AnyPgColumn } from 'drizzle-orm/pg-core';
+import { athletes, assessments, catalogItems, appSettings, groupMembers, groups } from '@/db/schema';
+import { DEFAULT_PLAN_LIMITS, type GroupFlags, type GroupSummary, type PlanLimits } from '@/lib/groups';
+import { getGroupPublicSettings, getPlanLimits, listGroups } from '@/lib/group-actions';
+import { DEFAULT_GROUP_PUBLIC_SETTINGS, type GroupPublicSettings } from '@/lib/group-columns';
+import { generateCode } from '@/lib/mock-product';
 import { isFutureIso, isValidIsoDate, todayIso } from '@/lib/date';
 import type { Athlete, ProductSettings } from '@/lib/mock-product';
 import type { NewAthleteInput, AssessmentDraftInput } from '@/lib/form-types';
 import { defaultFichaSections, FICHA_SECTION_KEYS, type CatalogKind, type FichaSectionsConfig, type FichaSectionKey } from '@/lib/ficha';
-import { publicPhotoUrl } from '@/lib/photo';
+import { toAthlete } from '@/lib/athlete-mapper';
 
 /**
  * Fecha de valoración: `yyyy-mm-dd` válido y no futuro (según el calendario de
@@ -21,6 +24,9 @@ const assessedOnDate = (value: string | undefined): string => {
   return trimmed;
 };
 
+/** Campo de catálogo opcional: vacío o solo espacios se guarda como null. */
+const optionalLabel = (value: string | undefined): string | null => value?.trim() || null;
+
 const num = (value: string): number | undefined => {
   const trimmed = value?.trim();
   if (!trimmed) return undefined;
@@ -28,48 +34,26 @@ const num = (value: string): number | undefined => {
   return Number.isFinite(parsed) ? parsed : undefined;
 };
 
-/** Convierte una fila de deportista (+ TODAS sus valoraciones, más recientes primero) al shape de la UI. */
-async function toAthlete(
-  row: typeof athletes.$inferSelect,
-  rows: (typeof assessments.$inferSelect)[],
-): Promise<Athlete> {
-  const built = rows.map((r) =>
-    buildAssessment(
-      row.sex as 'M' | 'F',
-      row.birthDate,
-      r.assessedOn,
-      {
-        anthropometry: r.anthropometry,
-        cardio: r.cardio,
-        rom: r.rom,
-        flexibility: r.flexibility,
-        performance: r.performance,
-        observations: r.observations,
-        plan: r.plan,
-      },
-      r.id,
-    ),
-  );
-  const assessments = built.length ? built : [emptyAssessment()];
-  const latest = built[0];
-  const state = latest ? deriveStatus(latest) : { status: 'warning' as const, statusLabel: 'Nuevo' };
+/** Ítem de catálogo con id: los flags de grupo guardan el id, no el texto. */
+export type CatalogOption = { id: string; kind: string; label: string };
 
-  return {
-    id: row.id,
-    name: row.name,
-    code: row.code,
-    document: row.document,
-    birthDate: row.birthDate,
-    sex: row.sex as 'M' | 'F',
-    category: row.category ?? '',
-    group: row.group ?? '',
-    sport: row.sport ?? '',
-    position: row.position ?? '',
-    photoUrl: publicPhotoUrl(row.photoPath),
-    status: state.status,
-    statusLabel: state.statusLabel,
-    assessments,
-  };
+/**
+ * Grupos + límites. Si las tablas de Fase 2 aún no existen en la base (antes del
+ * `db:push`), la app sigue funcionando como en Fase 1 con `groupsReady: false`.
+ */
+async function loadGroups(): Promise<{
+  groups: GroupSummary[];
+  planLimits: PlanLimits;
+  groupPublicSettings: GroupPublicSettings;
+  groupsReady: boolean;
+}> {
+  try {
+    const [list, planLimits, groupPublicSettings] = await Promise.all([listGroups(), getPlanLimits(), getGroupPublicSettings()]);
+    return { groups: list, planLimits, groupPublicSettings, groupsReady: true };
+  } catch (error) {
+    console.warn('[grupos] tablas no disponibles todavía; se omite el módulo.', error);
+    return { groups: [], planLimits: DEFAULT_PLAN_LIMITS, groupPublicSettings: DEFAULT_GROUP_PUBLIC_SETTINGS, groupsReady: false };
+  }
 }
 
 export async function getInitialData(): Promise<{
@@ -77,13 +61,20 @@ export async function getInitialData(): Promise<{
   settings: ProductSettings;
   fichaTheme: 'light' | 'dark';
   fichaSectionsByCategory: FichaSectionsConfig;
+  catalogOptions: CatalogOption[];
+  groups: GroupSummary[];
+  planLimits: PlanLimits;
+  groupPublicSettings: GroupPublicSettings;
+  groupsReady: boolean;
 }> {
-  const [athleteRows, assessmentRows, catalogRows, fichaTheme, fichaSectionsByCategory] = await Promise.all([
-    db.select().from(athletes).orderBy(desc(athletes.createdAt)),
+  const [athleteRows, assessmentRows, catalogRows, fichaTheme, fichaSectionsByCategory, groupData] = await Promise.all([
+    // Los eliminados (borrado lógico) no llegan a la app; los inhabilitados sí, marcados.
+    db.select().from(athletes).where(isNull(athletes.deletedAt)).orderBy(desc(athletes.createdAt)),
     db.select().from(assessments).where(isNull(assessments.deletedAt)),
     db.select().from(catalogItems).orderBy(catalogItems.sort),
     getFichaTheme(),
     getFichaSectionsByCategory(),
+    loadGroups(),
   ]);
 
   // Todas las valoraciones por deportista, más recientes primero.
@@ -101,7 +92,19 @@ export async function getInitialData(): Promise<{
     );
   }
 
-  const mapped = await Promise.all(athleteRows.map((row) => toAthlete(row, byAthlete.get(row.id) ?? [])));
+  const groupIdsByAthlete = new Map<string, string[]>();
+  for (const group of groupData.groups) {
+    for (const athleteId of group.memberIds) {
+      groupIdsByAthlete.set(athleteId, [...(groupIdsByAthlete.get(athleteId) ?? []), group.id]);
+    }
+  }
+
+  const mapped = await Promise.all(
+    athleteRows.map(async (row) => ({
+      ...(await toAthlete(row, byAthlete.get(row.id) ?? [])),
+      groupIds: groupIdsByAthlete.get(row.id) ?? [],
+    })),
+  );
 
   const byKind = (kind: CatalogKind) => catalogRows.filter((c) => c.kind === kind).map((c) => c.label);
   const settings: ProductSettings = {
@@ -109,9 +112,18 @@ export async function getInitialData(): Promise<{
     groups: byKind('group'),
     sports: byKind('sport'),
     positions: byKind('position'),
+    sedes: byKind('sede'),
+    modalidades: byKind('modalidad'),
   };
 
-  return { athletes: mapped, settings, fichaTheme, fichaSectionsByCategory };
+  return {
+    athletes: mapped,
+    settings,
+    fichaTheme,
+    fichaSectionsByCategory,
+    catalogOptions: catalogRows.map((row) => ({ id: row.id, kind: row.kind, label: row.label })),
+    ...groupData,
+  };
 }
 
 export async function createAthlete(input: NewAthleteInput): Promise<Athlete> {
@@ -126,10 +138,10 @@ export async function createAthlete(input: NewAthleteInput): Promise<Athlete> {
           document: input.document.trim(),
           birthDate: input.birthDate,
           sex: input.sex,
-          category: input.category,
-          group: input.group,
-          sport: input.sport,
-          position: input.position,
+          category: optionalLabel(input.category),
+          group: optionalLabel(input.group),
+          sport: optionalLabel(input.sport),
+          position: optionalLabel(input.position),
           photoPath: input.photoPath ?? null,
         })
         .returning();
@@ -153,10 +165,10 @@ export async function updateAthlete(
     document: input.document.trim(),
     birthDate: input.birthDate,
     sex: input.sex,
-    category: input.category,
-    group: input.group,
-    sport: input.sport,
-    position: input.position,
+    category: optionalLabel(input.category),
+    group: optionalLabel(input.group),
+    sport: optionalLabel(input.sport),
+    position: optionalLabel(input.position),
     updatedAt: new Date(),
   };
   // Solo reemplaza la foto si se subió una nueva.
@@ -273,6 +285,39 @@ export async function deleteAssessment(assessmentId: string, reason: string): Pr
   if (!result.length) throw new Error('La ficha no existe o ya fue eliminada.');
 }
 
+/** Inhabilita o reactiva un deportista. Sus fichas, grupos y enlaces se conservan. */
+export async function setAthleteDisabled(athleteId: string, disabled: boolean): Promise<void> {
+  const result = await db
+    .update(athletes)
+    .set({ disabledAt: disabled ? new Date() : null, updatedAt: new Date() })
+    .where(and(eq(athletes.id, athleteId), isNull(athletes.deletedAt)))
+    .returning({ id: athletes.id });
+  if (!result.length) throw new Error('El deportista no existe o fue eliminado.');
+}
+
+/**
+ * Elimina un deportista (borrado lógico) exigiendo una justificación, igual que
+ * las fichas. Deja de listarse, sale de sus grupos (queda en el histórico) y sus
+ * fichas públicas responden 404. La fila y las fichas se conservan en BD.
+ */
+export async function deleteAthlete(athleteId: string, reason: string): Promise<void> {
+  const clean = reason.trim();
+  if (clean.length < 5) throw new Error('La justificación es obligatoria (mínimo 5 caracteres).');
+
+  await db.transaction(async (tx) => {
+    const result = await tx
+      .update(athletes)
+      .set({ deletedAt: new Date(), deletedReason: clean.slice(0, 500), group: null, updatedAt: new Date() })
+      .where(and(eq(athletes.id, athleteId), isNull(athletes.deletedAt)))
+      .returning({ id: athletes.id });
+    if (!result.length) throw new Error('El deportista no existe o ya fue eliminado.');
+    await tx
+      .update(groupMembers)
+      .set({ leftAt: todayIso() })
+      .where(and(eq(groupMembers.athleteId, athleteId), isNull(groupMembers.leftAt)));
+  });
+}
+
 // ---- Catálogos (variables editables por el admin) ----
 
 // ---- Tema de la ficha (claro / oscuro) ----
@@ -320,22 +365,120 @@ export async function setFichaSectionsForCategory(category: string, sections: Fi
     .onConflictDoUpdate({ target: appSettings.key, set: { value: JSON.stringify(current) } });
 }
 
-export async function addCatalogItem(kind: CatalogKind, label: string): Promise<void> {
+/**
+ * Columna de `athletes` que guarda el texto de cada catálogo. Los deportistas
+ * copian la etiqueta (no un id), así que renombrar o borrar en el catálogo tiene
+ * que tocarlos también — si no, quedan huérfanos (caso Cofisam/Coofisam).
+ */
+const athleteColumnByKind: Partial<Record<CatalogKind, AnyPgColumn>> = {
+  category: athletes.category,
+  group: athletes.group,
+  sport: athletes.sport,
+  position: athletes.position,
+};
+
+/**
+ * Flag de grupo que apunta a cada catálogo. Los grupos guardan el id del ítem
+ * (no el texto), así que renombrar no los toca; borrar sí debe revisarlos.
+ */
+const groupFlagByKind: Partial<Record<CatalogKind, keyof GroupFlags>> = {
+  sport: 'disciplina',
+  sede: 'sede',
+  modalidad: 'modalidad',
+};
+
+/** Mensaje de error para mostrar al usuario, o null si la operación se aplicó. */
+type CatalogResult = string | null;
+
+const sameLabel = (a: string, b: string) => a.trim().toLocaleLowerCase('es') === b.trim().toLocaleLowerCase('es');
+
+export async function addCatalogItem(kind: CatalogKind, label: string): Promise<CatalogResult> {
   const clean = label.trim();
-  if (!clean) return;
+  if (!clean) return null;
   const rows = await db.select().from(catalogItems).where(eq(catalogItems.kind, kind));
+  const existing = rows.find((row) => sameLabel(row.label, clean));
+  if (existing) return `"${existing.label}" ya existe.`;
   await db.insert(catalogItems).values({ kind, label: clean, sort: rows.length });
+  return null;
 }
 
-export async function renameCatalogItem(kind: CatalogKind, oldLabel: string, newLabel: string): Promise<void> {
+/**
+ * Renombra la opción y, en la misma transacción, a todos los deportistas que la
+ * tienen (y la clave de secciones de ficha si es una categoría). O se aplica todo,
+ * o nada.
+ */
+export async function renameCatalogItem(kind: CatalogKind, oldLabel: string, newLabel: string): Promise<CatalogResult> {
   const clean = newLabel.trim();
-  if (!clean) return;
-  await db
-    .update(catalogItems)
-    .set({ label: clean })
-    .where(and(eq(catalogItems.kind, kind), eq(catalogItems.label, oldLabel)));
+  if (!clean || clean === oldLabel) return null;
+
+  return db.transaction(async (tx) => {
+    const rows = await tx.select().from(catalogItems).where(eq(catalogItems.kind, kind));
+    const clash = rows.find((row) => row.label !== oldLabel && sameLabel(row.label, clean));
+    if (clash) return `"${clash.label}" ya existe. Para unir las dos opciones, reasigna los deportistas y borra la sobrante.`;
+
+    await tx
+      .update(catalogItems)
+      .set({ label: clean })
+      .where(and(eq(catalogItems.kind, kind), eq(catalogItems.label, oldLabel)));
+
+    const column = athleteColumnByKind[kind];
+    if (column) {
+      await tx
+        .update(athletes)
+        .set({ [kind]: clean, updatedAt: new Date() }) // kind === nombre del campo en athletes
+        .where(eq(column, oldLabel));
+    }
+
+    if (kind === 'category') {
+      const [settingsRow] = await tx
+        .select()
+        .from(appSettings)
+        .where(eq(appSettings.key, 'ficha_sections_by_category'))
+        .limit(1);
+      if (settingsRow?.value) {
+        const config = JSON.parse(settingsRow.value) as Record<string, unknown>;
+        if (oldLabel in config) {
+          config[clean] = config[oldLabel];
+          delete config[oldLabel];
+          await tx
+            .update(appSettings)
+            .set({ value: JSON.stringify(config) })
+            .where(eq(appSettings.key, 'ficha_sections_by_category'));
+        }
+      }
+    }
+    return null;
+  });
 }
 
-export async function deleteCatalogItem(kind: CatalogKind, label: string): Promise<void> {
-  await db.delete(catalogItems).where(and(eq(catalogItems.kind, kind), eq(catalogItems.label, label)));
+/** Solo borra si ningún deportista ni grupo usa la opción; si no, avisa quién la usa. */
+export async function deleteCatalogItem(kind: CatalogKind, label: string): Promise<CatalogResult> {
+  const column = athleteColumnByKind[kind];
+  if (column) {
+    const inUse = await db.select({ id: athletes.id }).from(athletes).where(eq(column, label));
+    if (inUse.length > 0) {
+      return `"${label}" está asignado a ${inUse.length} deportista(s). Reasígnalos antes de borrarlo.`;
+    }
+  }
+
+  const [item] = await db
+    .select()
+    .from(catalogItems)
+    .where(and(eq(catalogItems.kind, kind), eq(catalogItems.label, label)))
+    .limit(1);
+  if (!item) return null;
+
+  const flag = groupFlagByKind[kind];
+  if (flag) {
+    const usedBy = await db
+      .select({ name: groups.name })
+      .from(groups)
+      .where(sql`${groups.flags} ->> ${flag} = ${item.id}`);
+    if (usedBy.length > 0) {
+      return `"${label}" está en uso por ${usedBy.length} grupo(s): ${usedBy.map((g) => g.name).join(', ')}. Cámbialo en esos grupos antes de borrarlo.`;
+    }
+  }
+
+  await db.delete(catalogItems).where(eq(catalogItems.id, item.id));
+  return null;
 }

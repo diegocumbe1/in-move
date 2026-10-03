@@ -99,7 +99,10 @@ export type Performance = z.infer<typeof performanceSchema>;
 export const SEXES = ['M', 'F'] as const;
 export type Sex = (typeof SEXES)[number];
 
-export const CATALOG_KINDS = ['category', 'group', 'sport', 'position'] as const;
+// 'group' queda como legado congelado (sin edición en Configuración): los grupos
+// reales viven en la tabla `groups`. 'sede' y 'modalidad' son flags del grupo; la
+// disciplina del grupo usa 'sport' (una sola lista con Deportes).
+export const CATALOG_KINDS = ['category', 'group', 'sport', 'position', 'sede', 'modalidad'] as const;
 export type CatalogKind = (typeof CATALOG_KINDS)[number];
 
 export type FichaTheme = 'light' | 'dark';

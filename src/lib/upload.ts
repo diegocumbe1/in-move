@@ -4,8 +4,12 @@ import { createClient } from '@/lib/supabase/client';
 
 const PHOTO_BUCKET = 'athlete-photos';
 
-/** Lado mayor máximo al que se reduce la foto antes de subirla. */
-const MAX_EDGE = 1024;
+/**
+ * Lado mayor máximo al que se reduce la foto antes de subirla. La foto más
+ * grande en pantalla es la de la ficha (240 px de ancho, 480 px en retina).
+ */
+const MAX_EDGE = 800;
+const WEBP_QUALITY = 0.8;
 const JPEG_QUALITY = 0.82;
 /** Las rutas son UUID irrepetibles: el objeto nunca cambia, así que cachea un año. */
 const CACHE_CONTROL = '31536000';
@@ -30,8 +34,9 @@ async function decode(file: File): Promise<ImageBitmap | HTMLImageElement> {
 }
 
 /**
- * Reduce la foto a {@link MAX_EDGE} px de lado mayor y la reencoda como JPEG.
- * Una foto de móvil pasa de ~2-3 MB a ~80-150 KB. Si algo falla devolvemos el
+ * Reduce la foto a {@link MAX_EDGE} px de lado mayor y la reencoda como WebP.
+ * Una foto de móvil pasa de ~2-3 MB a ~40-80 KB. Si el navegador no sabe
+ * codificar WebP (devuelve PNG), cae a JPEG. Si algo falla devolvemos el
  * original: subir pesado es mejor que no poder crear el deportista.
  */
 async function compress(file: File): Promise<{ blob: Blob; ext: string; type: string }> {
@@ -52,11 +57,13 @@ async function compress(file: File): Promise<{ blob: Blob; ext: string; type: st
     ctx.drawImage(bitmap, 0, 0, width, height);
     if ('close' in bitmap) bitmap.close();
 
-    const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, 'image/jpeg', JPEG_QUALITY),
-    );
-    if (!blob || blob.size >= file.size) return original;
-    return { blob, ext: 'jpg', type: 'image/jpeg' };
+    const encode = (type: string, quality: number) =>
+      new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, quality));
+    const webp = await encode('image/webp', WEBP_QUALITY);
+    if (webp?.type === 'image/webp' && webp.size < file.size) return { blob: webp, ext: 'webp', type: 'image/webp' };
+    const jpeg = await encode('image/jpeg', JPEG_QUALITY);
+    if (!jpeg || jpeg.size >= file.size) return original;
+    return { blob: jpeg, ext: 'jpg', type: 'image/jpeg' };
   } catch {
     return original;
   }

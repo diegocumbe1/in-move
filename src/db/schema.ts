@@ -1,4 +1,6 @@
-import { pgTable, uuid, text, date, integer, timestamp, jsonb } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import { pgTable, uuid, text, date, integer, timestamp, jsonb, uniqueIndex, index } from 'drizzle-orm/pg-core';
+import type { GroupFlags, GroupResponsible } from '@/lib/groups';
 import type {
   Anthropometry,
   Cardio,
@@ -34,6 +36,12 @@ export const athletes = pgTable('athletes', {
   sport: text('sport'),
   position: text('position'),
   photoPath: text('photo_path'), // ruta dentro del bucket athlete-photos
+  // Inhabilitado: no aparece en listados, grupos ni rankings; se puede reactivar.
+  disabledAt: timestamp('disabled_at', { withTimezone: true }),
+  // Borrado logico (igual que assessments): se oculta de la app y de su ficha
+  // publica, pero se conserva en BD con la justificacion.
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  deletedReason: text('deleted_reason'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
@@ -65,8 +73,52 @@ export const appSettings = pgTable('app_settings', {
   value: text('value').notNull(),
 });
 
+// Fase 2 · C1 — Grupos como entidad. Grupo ≠ categoría (ver PLAN_FASE2_C1.md §2.1).
+export const groups = pgTable('groups', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  // Normalizado (sin tildes, minúsculas): impide "Running" y "running " como dos grupos.
+  slug: text('slug').notNull().unique(),
+  description: text('description'),
+  logoPath: text('logo_path'),
+  color: text('color'),
+  // Flags (disciplina, sede, modalidad) con el id del ítem de catálogo, no el texto.
+  flags: jsonb('flags').$type<GroupFlags>().notNull().default({}),
+  capacity: integer('capacity'),
+  // Responsable del grupo (dueño de la escuela, líder, entrenador): datos básicos.
+  responsible: jsonb('responsible').$type<GroupResponsible>(),
+  // Token del enlace público de la ficha grupal. null = enlace desactivado.
+  // Es aleatorio e independiente del id: revocar o regenerar invalida el enlace anterior.
+  shareToken: text('share_token').unique(),
+  status: text('status').notNull().default('active'), // active | inactive | archived
+  startsOn: date('starts_on'),
+  endsOn: date('ends_on'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Membresías con histórico: left_at null = activa. Un deportista puede estar en
+// varios grupos y reingresar a uno, pero no estar dos veces activo en el mismo.
+export const groupMembers = pgTable(
+  'group_members',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    groupId: uuid('group_id').notNull().references(() => groups.id, { onDelete: 'cascade' }),
+    athleteId: uuid('athlete_id').notNull().references(() => athletes.id, { onDelete: 'cascade' }),
+    joinedAt: date('joined_at').notNull().defaultNow(),
+    leftAt: date('left_at'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('group_members_unique_active').on(t.groupId, t.athleteId).where(sql`left_at is null`),
+    index('group_members_athlete_idx').on(t.athleteId),
+  ],
+);
+
 export type Athlete = typeof athletes.$inferSelect;
 export type NewAthlete = typeof athletes.$inferInsert;
 export type Assessment = typeof assessments.$inferSelect;
 export type NewAssessment = typeof assessments.$inferInsert;
 export type CatalogItem = typeof catalogItems.$inferSelect;
+export type Group = typeof groups.$inferSelect;
+export type GroupMember = typeof groupMembers.$inferSelect;

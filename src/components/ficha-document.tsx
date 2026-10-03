@@ -203,7 +203,7 @@ export function FichaDocument({ data, sections }: { data: FichaData; sections?: 
       {/* Header */}
       <div className="flex items-center gap-4 rounded-lg bg-green-700 px-4 py-3">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo.jpg" alt="In Move" className="size-14 shrink-0 rounded-full bg-[var(--fc-card)] object-cover ring-2 ring-white/40" />
+        <img src="/logo.webp" alt="In Move" className="size-14 shrink-0 rounded-full bg-[var(--fc-card)] object-cover ring-2 ring-white/40" />
         <h1 className="flex-1 text-center text-lg font-extrabold uppercase tracking-wide text-white md:text-xl">
           Ficha de Valoración In Move
         </h1>
