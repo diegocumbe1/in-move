@@ -11,7 +11,8 @@ export async function getFichaData(assessmentId: string): Promise<FichaData | nu
   // Las fichas eliminadas (borrado lógico) dejan de ser públicas.
   if (!row || row.deletedAt) return null;
   const [ath] = await db.select().from(athletes).where(eq(athletes.id, row.athleteId)).limit(1);
-  if (!ath) return null;
+  // Deportista eliminado: sus fichas dejan de ser públicas.
+  if (!ath || ath.deletedAt) return null;
 
   return {
     name: ath.name,

@@ -2,7 +2,7 @@ import { formatDate, todayIso } from '@/lib/date';
 import type { Level } from '@/styles/tokens';
 import type { Anthropometry, Cardio, Rom, Flexibility, Performance } from '@/lib/ficha';
 
-export type ViewId = 'athletes' | 'assessment' | 'dashboard' | 'settings';
+export type ViewId = 'athletes' | 'groups' | 'assessment' | 'dashboard' | 'settings';
 
 export type RadarKey = 'strength' | 'speed' | 'agility' | 'jump';
 
@@ -68,13 +68,20 @@ export type Athlete = {
   status: Level;
   statusLabel: string;
   assessments: Assessment[];
+  /** Grupos con membresía activa (Fase 2). El texto `group` es solo el espejo. */
+  groupIds?: string[];
+  /** Inhabilitado: fuera de grupos, rankings y panel; se puede reactivar. */
+  disabled?: boolean;
 };
 
 export type ProductSettings = {
   categories: string[];
+  /** Legado (catálogo 'group'): los grupos reales viven en la tabla `groups`. */
   groups: string[];
   sports: string[];
   positions: string[];
+  sedes: string[];
+  modalidades: string[];
 };
 
 export const defaultSettings: ProductSettings = {
@@ -82,6 +89,8 @@ export const defaultSettings: ProductSettings = {
   groups: ['Running', 'Cofisam', 'Juvenil', 'Libre'],
   sports: ['Atletismo', 'Futbol', 'Triatlon', 'Funcional'],
   positions: ['Velocidad', 'Fondo', 'Volante', 'Extremo', 'General'],
+  sedes: [],
+  modalidades: [],
 };
 
 export const athletes: Athlete[] = [
