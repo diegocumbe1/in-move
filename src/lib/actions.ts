@@ -13,6 +13,7 @@ import type { Athlete, ProductSettings } from '@/lib/mock-product';
 import type { NewAthleteInput, AssessmentDraftInput } from '@/lib/form-types';
 import { defaultFichaSections, FICHA_SECTION_KEYS, type CatalogKind, type FichaSectionsConfig, type FichaSectionKey } from '@/lib/ficha';
 import { toAthlete } from '@/lib/athlete-mapper';
+import { DEFAULT_AGILITY_TEST, isAgilityTest, type AgilityTest } from '@/lib/agility';
 
 /**
  * Fecha de valoración: `yyyy-mm-dd` válido y no futuro (según el calendario de
@@ -61,19 +62,21 @@ export async function getInitialData(): Promise<{
   settings: ProductSettings;
   fichaTheme: 'light' | 'dark';
   fichaSectionsByCategory: FichaSectionsConfig;
+  agilityDefaultTest: AgilityTest;
   catalogOptions: CatalogOption[];
   groups: GroupSummary[];
   planLimits: PlanLimits;
   groupPublicSettings: GroupPublicSettings;
   groupsReady: boolean;
 }> {
-  const [athleteRows, assessmentRows, catalogRows, fichaTheme, fichaSectionsByCategory, groupData] = await Promise.all([
+  const [athleteRows, assessmentRows, catalogRows, fichaTheme, fichaSectionsByCategory, agilityDefaultTest, groupData] = await Promise.all([
     // Los eliminados (borrado lógico) no llegan a la app; los inhabilitados sí, marcados.
     db.select().from(athletes).where(isNull(athletes.deletedAt)).orderBy(desc(athletes.createdAt)),
     db.select().from(assessments).where(isNull(assessments.deletedAt)),
     db.select().from(catalogItems).orderBy(catalogItems.sort),
     getFichaTheme(),
     getFichaSectionsByCategory(),
+    getAgilityDefaultTest(),
     loadGroups(),
   ]);
 
@@ -121,6 +124,7 @@ export async function getInitialData(): Promise<{
     settings,
     fichaTheme,
     fichaSectionsByCategory,
+    agilityDefaultTest,
     catalogOptions: catalogRows.map((row) => ({ id: row.id, kind: row.kind, label: row.label })),
     ...groupData,
   };
@@ -244,7 +248,8 @@ export async function saveAssessment(
       velocidad10mS: num(draft.speed10m),
       velocidad20mS: num(draft.speed20m),
       velocidad30mS: num(draft.speed30m),
-      agilidadLabel: draft.agilityLabel.trim() || undefined,
+      // Sin tiempo no se guarda test; el texto libre legacy (agilidadLabel) se descarta al guardar.
+      agilidadTest: num(draft.agilidad505) != null && isAgilityTest(draft.agilityTest) ? draft.agilityTest : undefined,
       agilidad505S: num(draft.agilidad505),
       vo2Ml: num(draft.vo2),
     },
@@ -332,6 +337,21 @@ export async function setFichaTheme(theme: 'light' | 'dark'): Promise<void> {
     .insert(appSettings)
     .values({ key: 'ficha_theme', value: theme })
     .onConflictDoUpdate({ target: appSettings.key, set: { value: theme } });
+}
+
+// ---- Test de agilidad por defecto (preseleccionado en el formulario) ----
+
+export async function getAgilityDefaultTest(): Promise<AgilityTest> {
+  const [row] = await db.select().from(appSettings).where(eq(appSettings.key, 'agility_default_test')).limit(1);
+  return isAgilityTest(row?.value) ? row.value : DEFAULT_AGILITY_TEST;
+}
+
+export async function setAgilityDefaultTest(test: AgilityTest): Promise<void> {
+  if (!isAgilityTest(test)) return;
+  await db
+    .insert(appSettings)
+    .values({ key: 'agility_default_test', value: test })
+    .onConflictDoUpdate({ target: appSettings.key, set: { value: test } });
 }
 
 export async function getFichaSectionsByCategory(): Promise<FichaSectionsConfig> {

@@ -1,4 +1,5 @@
 import type { Sex } from '@/lib/ficha';
+import { DEFAULT_AGILITY_TEST, type AgilityTest } from '@/lib/agility';
 
 // DTOs de entrada desde el formulario (los 'use server' no pueden exportar tipos,
 // por eso viven aquí).
@@ -76,8 +77,8 @@ export type AssessmentDraftInput = {
   speed10m: string;
   speed20m: string;
   speed30m: string;
-  agilityLabel: string;
-  agilidad505: string;
+  agilityTest: AgilityTest;
+  agilidad505: string; // segundos del test elegido en agilityTest
   vo2: string;
   // Observaciones
   notes: string;
@@ -97,6 +98,6 @@ export const emptyDraft: AssessmentDraftInput = {
   rsi: '',
   squatLoad: '', squat1rm: '', squatVm: '', squatPower: '', pct1rm: '',
   bancaLoad: '', banca1rm: '', bancaVm: '', bancaPower: '', bancaPct1rm: '',
-  speed10m: '', speed20m: '', speed30m: '', agilityLabel: '', agilidad505: '', vo2: '',
+  speed10m: '', speed20m: '', speed30m: '', agilityTest: DEFAULT_AGILITY_TEST, agilidad505: '', vo2: '',
   notes: '', plan: '',
 };

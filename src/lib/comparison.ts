@@ -1,6 +1,7 @@
 import type { Level } from '@/styles/tokens';
 import type { Anthropometry, Cardio, Flexibility, Performance } from '@/lib/ficha';
-import { jumpAverage, normalize, normalizeAgility, normalizeSpeed } from '@/lib/scales';
+import { jumpAverage, normalize, normalizeSpeed } from '@/lib/scales';
+import { normalizeAgility, resolveAgilityTest } from '@/lib/agility';
 import { cmjNorm, cmjScore, sitReachNorm, type Band, type Norm, type Sex } from '@/lib/norms';
 
 /**
@@ -161,13 +162,14 @@ export function buildRadar(m: ComparisonMeasures, age: number | null = null): Ra
   const sprintDistance = speed10m != null ? 10 : speed20m != null ? 20 : 30;
   const speed = speed10m ?? speed20m ?? speed30m;
   const agility = p.agilidad505S;
+  const agilityTest = resolveAgilityTest(p.agilidadTest, agility);
   const cmj = p.cmjCm;
   // El eje de salto promedia las tres pruebas de salto disponibles.
   const jumpAvg = jumpAverage([p.dropJumpCm ?? p.sjCm, cmj, p.abalakovCm]);
   return [
     { label: 'Fuerza', score: normalize(bench, 20, 120), raw: bench == null ? '—' : `${bench} kg` },
     { label: 'Velocidad', score: normalizeSpeed(speed == null ? null : speed * (10 / sprintDistance)), raw: speed == null ? '—' : `${speed} s (${sprintDistance} m)` },
-    { label: 'Agilidad', score: normalizeAgility(agility), raw: agility == null ? '—' : `${agility} s` },
+    { label: 'Agilidad', score: normalizeAgility(agility, agilityTest), raw: agility == null ? '—' : `${agility} s (${agilityTest})` },
     // El salto se puntúa contra el baremo CMJ de su edad; sin edad, escala genérica.
     { label: 'Rendimiento · Salto', score: cmjScore(age, jumpAvg) ?? normalize(jumpAvg, 15, 55), raw: jumpAvg == null ? '—' : `${jumpAvg.toFixed(1)} cm (prom.)` },
   ];
