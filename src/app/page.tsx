@@ -68,6 +68,7 @@ import { uploadAthletePhoto } from '@/lib/upload';
 import { createClient as createSupabaseClient } from '@/lib/supabase/client';
 import type { AssessmentDraftInput } from '@/lib/form-types';
 import { classifyCmj, classifySitReach, jumpAverage } from '@/lib/scales';
+import { AGILITY_SCALES, AGILITY_TESTS, DEFAULT_AGILITY_TEST, normalizeAgility, resolveAgilityTest, type AgilityTest } from '@/lib/agility';
 import { isMaturityApplicable, offsetSentence } from '@/lib/maturity';
 import { cmjScore } from '@/lib/norms';
 import { FICHA_SECTION_KEYS, FICHA_SECTION_LABELS, sectionsForCategory, type CatalogKind, type FichaSectionsConfig, type FichaSectionKey, type FichaTheme } from '@/lib/ficha';
@@ -133,9 +134,6 @@ const toNumber = (value: string) => {
 const clampScore = (value: number) => Math.max(0, Math.min(100, Math.round(value)));
 const normalize = (value: number | null, min: number, max: number) =>
   value == null ? 0 : clampScore(((value - min) / (max - min)) * 100);
-// Agilidad (test 5-0-5, s): menor es mejor. Escala provisional 3.6 s = 0 → 2.2 s = 100.
-const normalizeAgility = (seconds: number | null) =>
-  seconds == null || seconds <= 0 ? 0 : clampScore(((3.6 - seconds) / (3.6 - 2.2)) * 100);
 const normalizeSpeed = (seconds: number | null) =>
   seconds == null || seconds <= 0 ? 0 : clampScore(((2.4 - seconds) / (2.4 - 1.5)) * 100);
 const kmhFromSprint = (meters: number, seconds: number | null) =>
@@ -239,6 +237,7 @@ export default function MockMvpApp() {
   const [editOpen, setEditOpen] = useState(false);
   const [fichaTheme, setFichaThemeState] = useState<FichaTheme>('light');
   const [fichaSectionsByCategory, setFichaSectionsByCategory] = useState<FichaSectionsConfig>({});
+  const [agilityDefaultTest, setAgilityDefaultTestState] = useState<AgilityTest>(DEFAULT_AGILITY_TEST);
   const [platformTheme, setPlatformTheme] = useState<FichaTheme>('dark');
   const [groups, setGroups] = useState<GroupSummary[]>([]);
   const [planLimits, setPlanLimits] = useState<PlanLimits>(DEFAULT_PLAN_LIMITS);
@@ -265,6 +264,7 @@ export default function MockMvpApp() {
         setSettings(data.settings);
         setFichaThemeState(data.fichaTheme);
         setFichaSectionsByCategory(data.fichaSectionsByCategory);
+        setAgilityDefaultTestState(data.agilityDefaultTest);
         applyGroupData(data);
         setSelectedId((current) => current || data.athletes[0]?.id || '');
         setLoading(false);
@@ -344,6 +344,7 @@ export default function MockMvpApp() {
     setSettings(data.settings);
     setFichaThemeState(data.fichaTheme);
     setFichaSectionsByCategory(data.fichaSectionsByCategory);
+    setAgilityDefaultTestState(data.agilityDefaultTest);
     applyGroupData(data);
     router.refresh();
   }
@@ -366,6 +367,11 @@ export default function MockMvpApp() {
   async function changeFichaTheme(theme: FichaTheme) {
     setFichaThemeState(theme);
     await api.setFichaTheme(theme);
+  }
+
+  async function changeAgilityDefaultTest(test: AgilityTest) {
+    setAgilityDefaultTestState(test);
+    await api.setAgilityDefaultTest(test);
   }
 
   function changePlatformTheme(theme: FichaTheme) {
@@ -650,6 +656,7 @@ export default function MockMvpApp() {
                   athlete={selected}
                   assessment={formAssessment ?? emptyAssessment()}
                   assessmentId={formAssessment?.id}
+                  defaultAgilityTest={agilityDefaultTest}
                   isAdmin={isAdmin}
                   onBack={() => setView('athletes')}
                   onSave={async (draft) => {
@@ -692,6 +699,8 @@ export default function MockMvpApp() {
                   onReload={reload}
                   fichaTheme={fichaTheme}
                   onFichaTheme={changeFichaTheme}
+                  agilityDefaultTest={agilityDefaultTest}
+                  onAgilityDefaultTest={changeAgilityDefaultTest}
                   platformTheme={platformTheme}
                   onPlatformTheme={changePlatformTheme}
                   fichaSectionsByCategory={fichaSectionsByCategory}
@@ -1579,6 +1588,7 @@ function AssessmentView({
   athlete,
   assessment,
   assessmentId,
+  defaultAgilityTest,
   isAdmin,
   onBack,
   onSave,
@@ -1588,6 +1598,8 @@ function AssessmentView({
   athlete: Athlete;
   assessment: Assessment;
   assessmentId?: string;
+  /** Test preseleccionado en fichas sin tiempo de agilidad (Settings). */
+  defaultAgilityTest: AgilityTest;
   isAdmin: boolean;
   onBack: () => void;
   onSave: (draft: AssessmentDraftInput) => Promise<void>;
@@ -1630,7 +1642,9 @@ function AssessmentView({
       bancaPower: s(p.pressBancaPotenciaW),
       bancaPct1rm: s(p.pct1rmPressBanca),
       speed10m: s(p.velocidad10mS), speed20m: s(p.velocidad20mS), speed30m: s(p.velocidad30mS),
-      agilityLabel: s(p.agilidadLabel), agilidad505: s(p.agilidad505S), vo2: s(p.vo2Ml),
+      // Con tiempo guardado se respeta su test (o se deduce en fichas antiguas); sin tiempo, el de Settings.
+      agilityTest: p.agilidad505S != null ? resolveAgilityTest(p.agilidadTest, p.agilidad505S) : defaultAgilityTest,
+      agilidad505: s(p.agilidad505S), vo2: s(p.vo2Ml),
       notes: assessment.profile?.notes || '', plan: assessment.raw?.plan ?? '',
     };
   });
@@ -1729,7 +1743,7 @@ function AssessmentView({
   const liveRadar: RadarMetric[] = [
     { key: 'strength', label: 'Fuerza', shortLabel: 'Fuerza', score: normalize(benchValue, 20, 120), team: 70, raw: benchValue == null ? 'Sin dato' : `${benchValue} kg`, source: 'Press banca 1RM' },
     { key: 'speed', label: 'Velocidad punta', shortLabel: 'Velocidad', score: normalizeSpeed(sprintValue == null ? null : sprintValue * (10 / sprintDistanceM)), team: 68, raw: kmh == null ? 'Sin dato' : `${kmh.toFixed(1)} km/h`, source: `Sprint ${sprintDistanceM} m` },
-    { key: 'agility', label: 'Agilidad', shortLabel: 'Agilidad', score: normalizeAgility(agilityValue), team: 66, raw: agilityValue == null ? 'Sin dato' : `${agilityValue} s`, source: draft.agilityLabel.trim() || 'Test 5-0-5' },
+    { key: 'agility', label: 'Agilidad', shortLabel: 'Agilidad', score: normalizeAgility(agilityValue, draft.agilityTest), team: 66, raw: agilityValue == null ? 'Sin dato' : `${agilityValue} s`, source: AGILITY_SCALES[draft.agilityTest].label },
     { key: 'jump', label: 'Rendimiento · Salto', shortLabel: 'Salto', score: cmjScore(age, jumpAvgValue) ?? normalize(jumpAvgValue, 15, 55), team: 61, raw: jumpAvgValue == null ? 'Sin dato' : `${jumpAvgValue.toFixed(1)} cm (prom.)`, source: 'Drop Jump · CMJ · Abalakov' },
   ];
   const liveAssessment: Assessment = {
@@ -1783,8 +1797,9 @@ function AssessmentView({
         velocidad10mS: speed10mValue ?? undefined,
         velocidad20mS: toNumber(draft.speed20m) ?? undefined,
         velocidad30mS: toNumber(draft.speed30m) ?? undefined,
-        agilidadLabel: draft.agilityLabel.trim() || undefined,
-        agilidad505S: toNumber(draft.agilidad505) ?? undefined,
+        agilidadLabel: undefined,
+        agilidadTest: agilityValue != null ? draft.agilityTest : undefined,
+        agilidad505S: agilityValue ?? undefined,
         vo2Ml: vo2Value ?? undefined,
       },
       plan: draft.plan.trim(),
@@ -2067,9 +2082,33 @@ function AssessmentView({
               ))}
           </div>
         </div>
-        <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {F('Test de agilidad', 'agilityLabel', 'Ej. T-test / 10M-5M-5M', 'text')}
-          {F('Valor agilidad (s)', 'agilidad505', 'Ej. 5.2')}
+        <div className="mt-4 rounded-lg border border-border bg-background/35 p-4">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-muted-foreground">Test de agilidad aplicado</p>
+            <div className="flex flex-wrap gap-2">
+              {AGILITY_TESTS.map((test) => (
+                <button
+                  key={test}
+                  type="button"
+                  disabled={!isAdmin}
+                  onClick={() => updateDraft('agilityTest', test)}
+                  className={`h-10 rounded-md border px-4 text-sm font-bold transition ${
+                    draft.agilityTest === test
+                      ? 'border-brand bg-brand text-brand-foreground'
+                      : 'border-border bg-surface text-muted-foreground'
+                  }`}
+                >
+                  {test}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {F(`Tiempo ${draft.agilityTest} (s)`, 'agilidad505', draft.agilityTest === '5-0-5' ? 'Ej. 2.6' : 'Ej. 5.2')}
+          </div>
+          <p className="mt-3 text-xs text-muted-foreground">
+            Se puntúa con la escala del test elegido: {AGILITY_SCALES[draft.agilityTest].full} s = 100 y {AGILITY_SCALES[draft.agilityTest].zero} s = 0.
+          </p>
         </div>
 
         <h3 className="mt-8 mb-3 text-sm font-bold uppercase tracking-wide text-brand">Observaciones y plan</h3>
@@ -3178,6 +3217,8 @@ function SettingsView({
   onReload,
   fichaTheme,
   onFichaTheme,
+  agilityDefaultTest,
+  onAgilityDefaultTest,
   platformTheme,
   onPlatformTheme,
   fichaSectionsByCategory,
@@ -3192,6 +3233,8 @@ function SettingsView({
   onReload: () => Promise<void>;
   fichaTheme: FichaTheme;
   onFichaTheme: (theme: FichaTheme) => Promise<void>;
+  agilityDefaultTest: AgilityTest;
+  onAgilityDefaultTest: (test: AgilityTest) => Promise<void>;
   platformTheme: FichaTheme;
   onPlatformTheme: (theme: FichaTheme) => void;
   fichaSectionsByCategory: FichaSectionsConfig;
@@ -3258,6 +3301,31 @@ function SettingsView({
             <span className="text-xs text-muted-foreground">Crea una ficha para previsualizar.</span>
           )}
         </div>
+      </section>
+
+      <section className="surface-1 rounded-lg p-4 md:p-5">
+        <SectionHeader eyebrow="Valoración" title="Test de agilidad por defecto" />
+        <p className="-mt-2 mb-4 text-sm text-muted-foreground">
+          Test que aparece preseleccionado al llenar una ficha nueva. En cada ficha se puede cambiar.
+          Cada test se puntúa con su propia escala en segundos, así que cambiar este valor no altera las fichas ya guardadas.
+        </p>
+        <div className="inline-flex rounded-md border border-border bg-background p-1">
+          {AGILITY_TESTS.map((test) => (
+            <button
+              key={test}
+              type="button"
+              onClick={() => onAgilityDefaultTest(test)}
+              className={`h-10 rounded-sm px-4 text-sm font-semibold transition ${
+                agilityDefaultTest === test ? 'bg-brand text-brand-foreground' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {test}
+            </button>
+          ))}
+        </div>
+        <p className="mt-3 text-xs text-muted-foreground">
+          Escalas provisionales: {AGILITY_TESTS.map((test) => `${test}: ${AGILITY_SCALES[test].full} s = 100, ${AGILITY_SCALES[test].zero} s = 0`).join(' · ')}.
+        </p>
       </section>
 
       <section className="surface-1 rounded-lg p-4 md:p-5">

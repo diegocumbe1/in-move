@@ -5,6 +5,7 @@ import Image from 'next/image';
 import type { Anthropometry, Cardio, Flexibility, Performance, Rom, FichaSectionKey } from '@/lib/ficha';
 import { biologicalAge, yearsBetween } from '@/lib/scales';
 import { isMaturityApplicable } from '@/lib/maturity';
+import { AGILITY_SCALES, resolveAgilityTest } from '@/lib/agility';
 
 /**
  * Documento de la FICHA DE VALORACIÓN IN MOVE — branding verde, estructurado
@@ -337,7 +338,7 @@ export function FichaDocument({ data, sections }: { data: FichaData; sections?: 
             <Metric label="Velocidad 10 m (s)" value={val(p.velocidad10mS)} />
             <Metric label="Velocidad 20 m (s)" value={val(p.velocidad20mS)} />
             <Metric label="Velocidad 30 m (s)" value={val(p.velocidad30mS)} />
-            <Metric label={p.agilidadLabel ? `${p.agilidadLabel} (s)` : 'Test de agilidad (s)'} value={val(p.agilidad505S)} />
+            <Metric label={`${AGILITY_SCALES[resolveAgilityTest(p.agilidadTest, p.agilidad505S)].label} (s)`} value={val(p.agilidad505S)} />
           </div>
         </>
       )}

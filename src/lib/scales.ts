@@ -3,6 +3,7 @@ import type { Assessment, Athlete, RadarMetric, ScaleMetric } from '@/lib/mock-p
 import type { Anthropometry, Cardio, Flexibility, Performance, Rom } from '@/lib/ficha';
 import { cmjNorm, cmjScore, sitReachNorm, type Norm } from '@/lib/norms';
 import { isoToInstant } from '@/lib/date';
+import { AGILITY_SCALES, normalizeAgility, resolveAgilityTest } from '@/lib/agility';
 
 /**
  * Escalas de clasificación (semáforo) y cálculos derivados de la ficha.
@@ -24,12 +25,6 @@ export const jumpAverage = (values: Array<number | null | undefined>) => {
   const measured = values.filter((v): v is number => v != null && Number.isFinite(v));
   return measured.length ? measured.reduce((total, v) => total + v, 0) / measured.length : null;
 };
-/**
- * Agilidad (test 5-0-5, segundos): menor es mejor.
- * Escala PROVISIONAL 3.6 s = 0 → 2.2 s = 100 (pendiente de baremo definitivo).
- */
-export const normalizeAgility = (seconds: number | null | undefined) =>
-  seconds == null || seconds <= 0 ? 0 : clampScore(((3.6 - seconds) / (3.6 - 2.2)) * 100);
 export const kmhFrom10m = (seconds: number | null | undefined) =>
   seconds == null || seconds <= 0 ? null : (10 / seconds) * 3.6;
 export const kmhFromSprint = (meters: number, seconds: number | null | undefined) =>
@@ -189,7 +184,7 @@ export function buildAssessment(
   const agility = m.performance?.agilidad505S ?? null;
   // El eje de salto promedia las tres pruebas de salto disponibles.
   const jumpAvg = jumpAverage([m.performance?.dropJumpCm ?? m.performance?.sjCm, cmj, m.performance?.abalakovCm]);
-  const agilityLabel = m.performance?.agilidadLabel?.trim() || 'Test 5-0-5';
+  const agilityTest = resolveAgilityTest(m.performance?.agilidadTest, agility);
   const kmh = kmhFromSprint(sprintDistance, sprintSeconds);
   const age = chronologicalAge(birthDate, assessedOn);
 
@@ -208,7 +203,7 @@ export function buildAssessment(
   const radar: RadarMetric[] = [
     { key: 'strength', label: 'Fuerza', shortLabel: 'Fuerza', score: normalize(bench, 20, 120), team: 70, raw: bench == null ? 'Sin dato' : `${bench} kg`, source: 'Press banca 1RM' },
     { key: 'speed', label: 'Velocidad punta', shortLabel: 'Velocidad', score: normalizeSpeed(sprintSeconds == null ? null : sprintSeconds * (10 / sprintDistance)), team: 68, raw: kmh == null ? 'Sin dato' : `${kmh.toFixed(1)} km/h`, source: `Sprint ${sprintDistance} m` },
-    { key: 'agility', label: 'Agilidad', shortLabel: 'Agilidad', score: normalizeAgility(agility), team: 66, raw: agility == null ? 'Sin dato' : `${agility} s`, source: agilityLabel },
+    { key: 'agility', label: 'Agilidad', shortLabel: 'Agilidad', score: normalizeAgility(agility, agilityTest), team: 66, raw: agility == null ? 'Sin dato' : `${agility} s`, source: AGILITY_SCALES[agilityTest].label },
     { key: 'jump', label: 'Rendimiento · Salto', shortLabel: 'Salto', score: cmjScore(age, jumpAvg) ?? normalize(jumpAvg, 15, 55), team: 61, raw: jumpAvg == null ? 'Sin dato' : `${jumpAvg.toFixed(1)} cm (prom.)`, source: 'Drop Jump · CMJ · Abalakov' },
   ];
 

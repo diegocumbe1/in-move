@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { AGILITY_TESTS } from '@/lib/agility';
 
 /**
  * Definicion de los campos de medida de la ficha (FICHA_CAMPOS.md).
@@ -85,8 +86,9 @@ export const performanceSchema = z.object({
   velocidad10mS: z.number().optional(),
   velocidad20mS: z.number().optional(),
   velocidad30mS: z.number().optional(),
-  agilidadLabel: z.string().optional(),
-  agilidad505S: z.number().optional(),
+  agilidadLabel: z.string().optional(), // legacy: texto libre, reemplazado por agilidadTest
+  agilidadTest: z.enum(AGILITY_TESTS).optional(),
+  agilidad505S: z.number().optional(), // segundos del test de agilidad (sea cual sea; el nombre es histórico)
   vo2Ml: z.number().optional(),
 });
 

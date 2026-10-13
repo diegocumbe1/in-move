@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
-<title>Puntaje de agilidad In Move</title>
+<title>Agilidad en el radar</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap">
@@ -21,6 +21,8 @@
   --now: #c8423a;
   --now-soft: #fbeceb;
   --band: rgba(0, 117, 61, 0.07);
+  --alt: #2f6fb3;
+  --alt-soft: #e6eef8;
   --display: "Sora", "Plus Jakarta Sans", system-ui, sans-serif;
   --body: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
@@ -30,12 +32,14 @@
   :root:not([data-theme="light"]) {
     --bg: #0f1612; --surface: #16201a; --fg: #e6eee8; --muted: #9aaba0; --line: #2a372f;
     --brand: #4fd08a; --brand-soft: #173826; --now: #ff7b72; --now-soft: #3a1d1b; --band: rgba(79, 208, 138, 0.08);
+    --alt: #7cb2ee; --alt-soft: #1a2a3d;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #0f1612; --surface: #16201a; --fg: #e6eee8; --muted: #9aaba0; --line: #2a372f;
   --brand: #4fd08a; --brand-soft: #173826; --now: #ff7b72; --now-soft: #3a1d1b; --band: rgba(79, 208, 138, 0.08);
+  --alt: #7cb2ee; --alt-soft: #1a2a3d;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -70,6 +74,17 @@ th.n { text-align: right; }
 .pill { display: inline-block; min-width: 40px; text-align: center; padding: 2px 8px; border-radius: 999px; font-family: var(--mono); font-size: 13px; }
 .pill.now { background: var(--now-soft); color: var(--now); }
 .pill.ok { background: var(--brand-soft); color: var(--brand); }
+.pill.alt { background: var(--alt-soft); color: var(--alt); }
+.chip { display: inline-block; padding: 1px 8px; border-radius: 6px; font-family: var(--mono); font-size: 12px; border: 1px solid var(--line); }
+.chip.alt { color: var(--alt); border-color: var(--alt); }
+.chip.ok { color: var(--brand); border-color: var(--brand); }
+.status { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; }
+.status.done { background: var(--brand-soft); color: var(--brand); }
+.status.open { background: var(--alt-soft); color: var(--alt); }
+.steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.step { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: grid; gap: 6px; align-content: start; }
+.step h3 { margin: 0; font-family: var(--display); font-size: 15px; }
+.step p { color: var(--muted); font-size: 14px; }
 .tag { font-size: 12px; color: var(--muted); }
 .flag td { background: var(--band); }
 .compare { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
@@ -90,30 +105,32 @@ footer { color: var(--muted); font-size: 13px; border-top: 1px solid var(--line)
 <body>
 <div class="wrap">
   <header>
-    <div class="eyebrow">In Move · Perfil de rendimiento</div>
-    <h1>Por qué la agilidad sale en 0 en el radar</h1>
-    <p class="lead">Carlos, los tiempos de agilidad se están guardando bien. El problema está en la escala que convierte los segundos en puntos. Abajo explicamos qué pasa y qué necesitamos que nos confirmes para corregirlo.</p>
+    <div class="eyebrow">In Move · Perfil de rendimiento · Actualizado 13 oct 2026</div>
+    <h1>Agilidad en el radar: cómo quedó</h1>
+    <p class="lead">Carlos, aplicamos tu respuesta: el puntaje se calcula con los segundos del test, y cada prueba usa su propia escala. Al registrar la prueba se elige cuál se hizo, y por defecto queda el 5-10-5.</p>
   </header>
 
   <section>
-    <h2>Qué está pasando</h2>
-    <p>El radar usa una escala pensada para el test <b>5-0-5</b>, que se corre en 2 a 3.6 segundos. En las fichas se están registrando tiempos de 4.4 a 6.2 segundos, propios del <b>5-10-5</b>. Para la escala actual, cualquier tiempo mayor a 3.6 s vale 0 puntos.</p>
+    <h2>Qué cambió</h2>
     <div class="facts">
       <div class="fact"><b>15</b><span>fichas tienen tiempo de agilidad registrado</span></div>
-      <div class="fact now"><b>14</b><span>quedan en 0 puntos con la escala actual</span></div>
-      <div class="fact ok"><b>13</b><span>tendrían puntaje con la escala propuesta</span></div>
+      <div class="fact now"><b>1 → 14</b><span>fichas con puntaje mayor a 0 (antes / ahora)</span></div>
+      <div class="fact ok"><b>0</b><span>deportistas hay que volver a medir</span></div>
+    </div>
+    <div class="steps">
+      <div class="step"><h3>1 · Selector en la ficha</h3><p>En "Velocidad y agilidad" se marca el test aplicado: <span class="chip ok">5-10-5</span> o <span class="chip alt">5-0-5</span>, y luego el tiempo en segundos.</p></div>
+      <div class="step"><h3>2 · Test por defecto en Settings</h3><p>En Settings → "Test de agilidad por defecto" se escoge cuál aparece preseleccionado. Hoy está en 5-10-5. En cada ficha se puede cambiar.</p></div>
+      <div class="step"><h3>3 · Cada test, su escala</h3><p>Los dos recorridos se parecen, pero se cronometran distinto, así que sus segundos no se comparan. Cada uno se convierte a puntos (0 a 100) con su propia escala.</p></div>
     </div>
   </section>
 
   <section>
-    <h2>Escala actual frente a escala propuesta</h2>
-    <p>Cada punto es un deportista real. La franja verde marca dónde están los tiempos que se registran hoy: toda cae donde la escala actual da 0.</p>
-    <div class="chart" role="img" aria-label="Gráfica de puntaje de agilidad según segundos. La escala actual llega a 0 en 3.6 segundos; la propuesta va de 100 puntos en 4.3 s a 0 puntos en 6.0 s.">
+    <h2>Las dos escalas</h2>
+    <p>Menos segundos, más puntos. Cada punto es un deportista real con el tiempo que ya está en el sistema.</p>
+    <div class="chart" role="img" aria-label="Gráfica de puntaje de agilidad según segundos. Escala 5-0-5: 100 puntos en 2.2 s y 0 en 3.6 s. Escala 5-10-5: 100 puntos en 4.3 s y 0 en 6.0 s. 14 tiempos de 5-10-5 entre 4.4 y 6.23 s y un tiempo de 5-0-5 de 3.52 s.">
       <svg viewBox="0 0 720 360">
-        <!-- franja de tiempos reales 4.4 – 6.23 s -->
         <rect x="396.7" y="30" width="264.3" height="280" fill="var(--band)"/>
-        <text x="528.8" y="22" text-anchor="middle" style="fill: var(--brand); font-weight: 600;">Tiempos registrados (4.4 – 6.23 s)</text>
-        <!-- grilla -->
+        <text x="528.8" y="22" text-anchor="middle" style="fill: var(--brand); font-weight: 600;">Tiempos 5-10-5 registrados (4.4 – 6.23 s)</text>
         <g stroke="var(--line)" stroke-width="1">
           <line x1="50" y1="310" x2="700" y2="310"/>
           <line x1="50" y1="240" x2="700" y2="240" stroke-dasharray="3 4"/>
@@ -129,20 +146,11 @@ footer { color: var(--muted); font-size: 13px; border-top: 1px solid var(--line)
         </g>
         <text x="375" y="352" text-anchor="middle">Tiempo del test (segundos) · menos es mejor</text>
         <text x="14" y="170" text-anchor="middle" transform="rotate(-90 14 170)">Puntaje radar</text>
-        <!-- escala actual -->
-        <polyline points="50,30 78.9,30 281.1,310 700,310" fill="none" stroke="var(--now)" stroke-width="3" stroke-linejoin="round"/>
-        <!-- escala propuesta -->
+        <!-- escala 5-0-5 -->
+        <polyline points="50,30 78.9,30 281.1,310 700,310" fill="none" stroke="var(--alt)" stroke-width="3" stroke-linejoin="round"/>
+        <!-- escala 5-10-5 -->
         <polyline points="50,30 382.2,30 627.8,310 700,310" fill="none" stroke="var(--brand)" stroke-width="3" stroke-linejoin="round"/>
-        <!-- puntos con escala actual (todos en 0 menos uno) -->
-        <g fill="var(--surface)" stroke="var(--now)" stroke-width="2">
-          <circle cx="396.7" cy="310" r="4.5"/><circle cx="414" cy="310" r="4.5"/><circle cx="432.8" cy="310" r="4.5"/>
-          <circle cx="457.3" cy="310" r="4.5"/><circle cx="460.2" cy="310" r="4.5"/><circle cx="470.3" cy="310" r="4.5"/>
-          <circle cx="512.2" cy="310" r="4.5"/><circle cx="519.4" cy="310" r="4.5"/><circle cx="529.6" cy="310" r="4.5"/>
-          <circle cx="554.1" cy="310" r="4.5"/><circle cx="571.4" cy="310" r="4.5"/><circle cx="578.7" cy="310" r="4.5"/>
-          <circle cx="580.1" cy="310" r="4.5"/><circle cx="661" cy="310" r="4.5"/>
-          <circle cx="269.6" cy="293.2" r="4.5"/>
-        </g>
-        <!-- puntos con escala propuesta -->
+        <!-- tiempos 5-10-5 -->
         <g fill="var(--brand)">
           <circle cx="396.7" cy="46.8" r="5"/><circle cx="414" cy="66.4" r="5"/><circle cx="432.8" cy="88.8" r="5"/>
           <circle cx="457.3" cy="116.8" r="5"/><circle cx="460.2" cy="119.6" r="5"/><circle cx="470.3" cy="130.8" r="5"/>
@@ -150,88 +158,91 @@ footer { color: var(--muted); font-size: 13px; border-top: 1px solid var(--line)
           <circle cx="554.1" cy="226" r="5"/><circle cx="571.4" cy="245.6" r="5"/><circle cx="578.7" cy="254" r="5"/>
           <circle cx="580.1" cy="256.8" r="5"/><circle cx="661" cy="310" r="5"/>
         </g>
-        <!-- anotaciones -->
-        <text x="150" y="150" style="fill: var(--now); font-weight: 600;">Actual: 2.2 s → 3.6 s</text>
-        <text x="236" y="80" style="fill: var(--brand); font-weight: 600;">Propuesta: 4.3 s → 6.0 s</text>
-        <text x="269.6" y="282" text-anchor="middle" class="num" style="fill: var(--now);">3.52 s</text>
+        <!-- tiempo 5-0-5 -->
+        <circle cx="269.6" cy="293.2" r="5" fill="var(--alt)"/>
+        <text x="214" y="205" style="fill: var(--alt); font-weight: 600;">5-0-5: 2.2 s → 3.6 s</text>
+        <text x="236" y="80" style="fill: var(--brand); font-weight: 600;">5-10-5: 4.3 s → 6.0 s</text>
+        <text x="262" y="282" text-anchor="end" class="num" style="fill: var(--alt);">3.52 s → 6</text>
         <text x="519.4" y="176" text-anchor="start" class="num" style="fill: var(--fg);"> Darío 5.25 s → 44</text>
       </svg>
       <div class="legend">
-        <span><i style="background: var(--now)"></i>Escala actual (5-0-5)</span>
-        <span><i style="background: var(--brand)"></i>Escala propuesta (5-10-5, provisional)</span>
+        <span><i style="background: var(--brand)"></i>Escala 5-10-5 (por defecto)</span>
+        <span><i style="background: var(--alt)"></i>Escala 5-0-5</span>
       </div>
     </div>
   </section>
 
   <section>
-    <h2>Cómo cambia cada deportista</h2>
-    <p>Puntaje del eje Agilidad en el radar (0 a 100), con los tiempos que ya están en el sistema. No hay que volver a medir a nadie.</p>
+    <h2>Cómo queda cada deportista</h2>
+    <p>Puntaje del eje Agilidad en el radar (0 a 100). Las fichas se recalcularon solas con los tiempos que ya estaban guardados.</p>
     <div class="table-box">
       <table>
-        <thead><tr><th>Deportista</th><th>Test anotado</th><th class="n">Tiempo</th><th class="n">Hoy</th><th class="n">Propuesta</th></tr></thead>
+        <thead><tr><th>Deportista</th><th>Test</th><th class="n">Tiempo</th><th class="n">Antes</th><th class="n">Ahora</th></tr></thead>
         <tbody>
-          <tr><td>Juan Felipe R.</td><td class="tag">505 agility</td><td class="n">4.40 s</td><td class="n"><span class="pill now">0</span></td><td class="n"><span class="pill ok">94</span></td></tr>
-          <tr><td>Gabriel P.</td><td class="tag">sin etiqueta</td><td class="n">4.52 s</td><td class="n"><span class="pill now">0</span></td><td class="n"><span class="pill ok">87</span></td></tr>
-          <tr><td>Juan Sebastián M.</td><td class="tag">5-10-5</td><td class="n">4.65 s</td><td class="n"><span class="pill now">0</span></td><td class="n"><span class="pill ok">79</span></td></tr>
-          <tr><td>Andrés G.</td><td class="tag">5-10-5</td><td class="n">4.82 s</td><td class="n"><span class="pill now">0</span></td><td class="n"><span class="pill ok">69</span></td></tr>
-          <tr><td>Santiago G.</td><td class="tag">505</td><td class="n">4.84 s</td><td class="n"><span class="pill now">0</span></td><td class="n"><span class="pill ok">68</span></td></tr>
-          <tr class="flag"><td>Daniel Alexander P.</td><td class="tag">5-10-5</td><td class="n">4.91 s</td><td class="n"><span class="pill now">0</span></td><td class="n"><span class="pill ok">64</span></td></tr>
-          <tr><td>Diego C.</td><td class="tag">sin etiqueta</td><td class="n">5.20 s</td><td class="n"><span class="pill now">0</span></td><td class="n"><span class="pill ok">47</span></td></tr>
-          <tr><td>Darío D.</td><td class="tag">505</td><td class="n">5.25 s</td><td class="n"><span class="pill now">0</span></td><td class="n"><span class="pill ok">44</span></td></tr>
-          <tr><td>Juan Esteban R.</td><td class="tag">5-10-5</td><td class="n">5.32 s</td><td class="n"><span class="pill now">0</span></td><td class="n"><span class="pill ok">40</span></td></tr>
-          <tr><td>Juan Felipe A.</td><td class="tag">5-10-5</td><td class="n">5.49 s</td><td class="n"><span class="pill now">0</span></td><td class="n"><span class="pill ok">30</span></td></tr>
-          <tr><td>Emanuel C.</td><td class="tag">5-10-5</td><td class="n">5.61 s</td><td class="n"><span class="pill now">0</span></td><td class="n"><span class="pill ok">23</span></td></tr>
-          <tr><td>Thiago H.</td><td class="tag">5-10-5</td><td class="n">5.66 s</td><td class="n"><span class="pill now">0</span></td><td class="n"><span class="pill ok">20</span></td></tr>
-          <tr><td>Jerónimo</td><td class="tag">5-10-5</td><td class="n">5.67 s</td><td class="n"><span class="pill now">0</span></td><td class="n"><span class="pill ok">19</span></td></tr>
-          <tr><td>Jerónimo V.</td><td class="tag">505</td><td class="n">6.23 s</td><td class="n"><span class="pill now">0</span></td><td class="n"><span class="pill ok">0</span></td></tr>
-          <tr class="flag"><td>Daniel Alexander P.</td><td class="tag">505</td><td class="n">3.52 s</td><td class="n"><span class="pill now">6</span></td><td class="n"><span class="pill ok">?</span></td></tr>
+          <tr><td>Juan Felipe R.</td><td><span class="chip ok">5-10-5</span></td><td class="n">4.40 s</td><td class="n"><span class="pill now">0</span></td><td class="n"><span class="pill ok">94</span></td></tr>
+          <tr><td>Gabriel P.</td><td><span class="chip ok">5-10-5</span></td><td class="n">4.52 s</td><td class="n"><span class="pill now">0</span></td><td class="n"><span class="pill ok">87</span></td></tr>
+          <tr><td>Juan Sebastián M.</td><td><span class="chip ok">5-10-5</span></td><td class="n">4.65 s</td><td class="n"><span class="pill now">0</span></td><td class="n"><span class="pill ok">79</span></td></tr>
+          <tr><td>Andrés G.</td><td><span class="chip ok">5-10-5</span></td><td class="n">4.82 s</td><td class="n"><span class="pill now">0</span></td><td class="n"><span class="pill ok">69</span></td></tr>
+          <tr><td>Santiago G.</td><td><span class="chip ok">5-10-5</span></td><td class="n">4.84 s</td><td class="n"><span class="pill now">0</span></td><td class="n"><span class="pill ok">68</span></td></tr>
+          <tr class="flag"><td>Daniel Alexander P.</td><td><span class="chip ok">5-10-5</span></td><td class="n">4.91 s</td><td class="n"><span class="pill now">0</span></td><td class="n"><span class="pill ok">64</span></td></tr>
+          <tr><td>Diego C.</td><td><span class="chip ok">5-10-5</span></td><td class="n">5.20 s</td><td class="n"><span class="pill now">0</span></td><td class="n"><span class="pill ok">47</span></td></tr>
+          <tr><td>Darío D.</td><td><span class="chip ok">5-10-5</span></td><td class="n">5.25 s</td><td class="n"><span class="pill now">0</span></td><td class="n"><span class="pill ok">44</span></td></tr>
+          <tr><td>Juan Esteban R.</td><td><span class="chip ok">5-10-5</span></td><td class="n">5.32 s</td><td class="n"><span class="pill now">0</span></td><td class="n"><span class="pill ok">40</span></td></tr>
+          <tr><td>Juan Felipe A.</td><td><span class="chip ok">5-10-5</span></td><td class="n">5.49 s</td><td class="n"><span class="pill now">0</span></td><td class="n"><span class="pill ok">30</span></td></tr>
+          <tr><td>Emanuel C.</td><td><span class="chip ok">5-10-5</span></td><td class="n">5.61 s</td><td class="n"><span class="pill now">0</span></td><td class="n"><span class="pill ok">23</span></td></tr>
+          <tr><td>Thiago H.</td><td><span class="chip ok">5-10-5</span></td><td class="n">5.66 s</td><td class="n"><span class="pill now">0</span></td><td class="n"><span class="pill ok">20</span></td></tr>
+          <tr><td>Jerónimo</td><td><span class="chip ok">5-10-5</span></td><td class="n">5.67 s</td><td class="n"><span class="pill now">0</span></td><td class="n"><span class="pill ok">19</span></td></tr>
+          <tr><td>Jerónimo V.</td><td><span class="chip ok">5-10-5</span></td><td class="n">6.23 s</td><td class="n"><span class="pill now">0</span></td><td class="n"><span class="pill ok">0</span></td></tr>
+          <tr class="flag"><td>Daniel Alexander P.</td><td><span class="chip alt">5-0-5</span></td><td class="n">3.52 s</td><td class="n"><span class="pill now">6</span></td><td class="n"><span class="pill alt">6</span></td></tr>
         </tbody>
       </table>
     </div>
-    <p class="tag">Las filas resaltadas son del mismo deportista y el mismo día (14 jul 2026): una anotada como 5-10-5 (4.91 s) y otra como 505 (3.52 s). Ver pregunta 2.</p>
+    <p class="tag">Jerónimo V. sigue en 0 porque 6.23 s supera el límite de 6.0 s de la escala 5-10-5. Las filas resaltadas son del mismo deportista y el mismo día (14 jul 2026): una con cada test.</p>
   </section>
 
   <section>
-    <h2>Las dos pruebas no se comparan</h2>
+    <h2>Fichas anteriores al cambio</h2>
+    <p>Antes, el nombre del test se escribía a mano, y no siempre coincidía con el tiempo (varias decían "505" con tiempos de 5-10-5). Por eso, en las fichas viejas el sistema identifica el test por los segundos: menos de 4 s es un 5-0-5 y desde 4 s es un 5-10-5. Los rangos de las dos pruebas no se cruzan, así que no hay confusión. Si se abre y se guarda una ficha vieja, queda con el test marcado en el selector.</p>
     <div class="compare">
       <div class="test">
-        <h3>5-0-5</h3>
-        <p>Carrera de aproximación de 10 m, giro de 180° y 5 m de regreso. Solo se cronometran los 5 m de ida y vuelta alrededor del giro.</p>
-        <div class="range">Tiempos típicos: 2.2 – 3.6 s</div>
+        <h3>5-10-5 (pro agility) · por defecto</h3>
+        <p>Desde el centro: 5 m a un lado, 10 m al otro y 5 m de vuelta. Se cronometran los 20 m completos.</p>
+        <div class="range">100 puntos = 4.3 s · 0 puntos = 6.0 s</div>
       </div>
       <div class="test">
-        <h3>5-10-5 (pro agility)</h3>
-        <p>Desde el centro: 5 m a un lado, 10 m al otro y 5 m de vuelta al centro. Se cronometran los 20 m completos.</p>
-        <div class="range">Tiempos típicos: 4.3 – 6.0 s</div>
+        <h3>5-0-5</h3>
+        <p>Aproximación de 10 m, giro de 180° y 5 m de regreso. Solo se cronometran los 5 m de ida y vuelta alrededor del giro.</p>
+        <div class="range">100 puntos = 2.2 s · 0 puntos = 3.6 s</div>
       </div>
     </div>
   </section>
 
   <section>
-    <h2>Lo que necesitamos que nos confirmes</h2>
+    <h2>Estado de las preguntas</h2>
     <ol class="asks">
-      <li><b>¿Qué prueba aplican: 5-10-5, 5-0-5 o las dos?</b><p>La ficha de campos dice "Test 5-10-5", pero varias fichas están anotadas como "505" con tiempos de 5-10-5. Si solo usan una, dejamos un selector fijo en el formulario para que no se mezclen.</p></li>
-      <li><b>¿El 3.52 s de Daniel Alexander fue un 5-0-5 real?</b><p>Ese mismo día tiene otra ficha con 4.91 s en 5-10-5. Si hizo las dos pruebas, el sistema debe puntuar cada una con su propia escala.</p></li>
-      <li><b>¿Con qué tiempos se ubica un deportista en 0 y en 100 puntos?</b><p>Proponemos 6.0 s = 0 y 4.3 s = 100 de forma provisional. Si tienen una tabla de referencia por edad y sexo, la cargamos igual que la del salto CMJ. Pueden llenar esta tabla:</p></li>
+      <li><b>¿Qué prueba aplican? <span class="status done">Resuelto</span></b><p>Las dos, según el día. Se elige en cada ficha, y el 5-10-5 queda por defecto desde Settings.</p></li>
+      <li><b>¿El 3.52 s de Daniel Alexander fue un 5-0-5? <span class="status open">Confirmar</span></b><p>El sistema lo toma como 5-0-5 por el tiempo y le da 6 puntos. Si en realidad fue otro test, se corrige en su ficha con el selector.</p></li>
+      <li><b>¿Con qué tiempos se ubica un deportista en 0 y en 100 puntos? <span class="status open">Pendiente</span></b><p>Las escalas de arriba son provisionales e iguales para todas las edades. Si tienen una tabla de referencia por edad y sexo, la cargamos igual que la del salto CMJ:</p></li>
     </ol>
     <div class="table-box fill">
       <table>
-        <thead><tr><th>Edad</th><th>Sexo</th><th class="n">Tiempo = 0 puntos (bajo)</th><th class="n">Tiempo = 100 puntos (excelente)</th></tr></thead>
+        <thead><tr><th>Edad</th><th>Test</th><th class="n">Tiempo = 0 puntos</th><th class="n">Tiempo = 100 puntos</th></tr></thead>
         <tbody>
-          <tr><td>12 – 13 años</td><td>M / F</td><td class="n"><span class="blank"></span> s</td><td class="n"><span class="blank"></span> s</td></tr>
-          <tr><td>14 – 15 años</td><td>M / F</td><td class="n"><span class="blank"></span> s</td><td class="n"><span class="blank"></span> s</td></tr>
-          <tr><td>16 – 17 años</td><td>M / F</td><td class="n"><span class="blank"></span> s</td><td class="n"><span class="blank"></span> s</td></tr>
-          <tr><td>18 años o más</td><td>M / F</td><td class="n"><span class="blank"></span> s</td><td class="n"><span class="blank"></span> s</td></tr>
-          <tr><td>Provisional (todas las edades)</td><td>M / F</td><td class="n">6.0 s</td><td class="n">4.3 s</td></tr>
+          <tr><td>12 – 13 años</td><td>5-10-5 / 5-0-5</td><td class="n"><span class="blank"></span> s</td><td class="n"><span class="blank"></span> s</td></tr>
+          <tr><td>14 – 15 años</td><td>5-10-5 / 5-0-5</td><td class="n"><span class="blank"></span> s</td><td class="n"><span class="blank"></span> s</td></tr>
+          <tr><td>16 – 17 años</td><td>5-10-5 / 5-0-5</td><td class="n"><span class="blank"></span> s</td><td class="n"><span class="blank"></span> s</td></tr>
+          <tr><td>18 años o más</td><td>5-10-5 / 5-0-5</td><td class="n"><span class="blank"></span> s</td><td class="n"><span class="blank"></span> s</td></tr>
+          <tr><td>Provisional (todas)</td><td>5-10-5</td><td class="n">6.0 s</td><td class="n">4.3 s</td></tr>
+          <tr><td>Provisional (todas)</td><td>5-0-5</td><td class="n">3.6 s</td><td class="n">2.2 s</td></tr>
         </tbody>
       </table>
     </div>
-    <ol class="asks" start="4" style="counter-reset: q 3;">
-      <li><b>Fichas sin test de agilidad: ¿mostrar 0 o "sin dato"?</b><p>Hoy un eje sin medir aparece en 0 y baja el puntaje global, como en la ficha de Juan David Ballesteros (7 oct), que no tiene agilidad ni velocidad. Podemos mostrarlo como "sin dato" y sacarlo del promedio.</p></li>
+    <ol class="asks" style="counter-reset: q 3;">
+      <li><b>Fichas sin test de agilidad: ¿mostrar 0 o "sin dato"? <span class="status open">Pendiente</span></b><p>Hoy un eje sin medir aparece en 0 y baja el puntaje global, como en la ficha de Juan David Ballesteros (7 oct), que no tiene agilidad ni velocidad. Podemos mostrarlo como "sin dato" y sacarlo del promedio.</p></li>
     </ol>
   </section>
 
-  <footer>Datos tomados de las 31 fichas registradas en In Move al 9 de octubre de 2026. Con tus respuestas aplicamos el cambio y todas las fichas existentes se recalculan solas.</footer>
+  <footer>Datos tomados de las fichas registradas en In Move al 9 de octubre de 2026. Las fichas existentes se recalculan solas con las escalas nuevas; con tus respuestas a las preguntas pendientes ajustamos las escalas.</footer>
 </div>
 </body>
 </html>
