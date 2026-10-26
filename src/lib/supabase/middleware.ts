@@ -40,8 +40,13 @@ export async function updateSession(request: NextRequest) {
   // - /ficha/[id]   -> ficha pública del deportista
   // - /propuestas/* -> propuestas comerciales que se comparten por enlace
   // - /grupo/[token] -> ficha grupal (solo datos generales) para el responsable del grupo
+  // - /api/integrations/* -> la consume Lynko con su propia clave (LYNKO_SYNC_KEY), no con sesión
   const isPublic =
-    isLogin || pathname.startsWith('/ficha') || pathname.startsWith('/propuestas') || pathname.startsWith('/grupo/');
+    isLogin ||
+    pathname.startsWith('/ficha') ||
+    pathname.startsWith('/propuestas') ||
+    pathname.startsWith('/grupo/') ||
+    pathname.startsWith('/api/integrations/');
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();
