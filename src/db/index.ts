@@ -15,3 +15,6 @@ const client = globalForDb.client ?? postgres(connectionString, { prepare: false
 if (process.env.NODE_ENV !== 'production') globalForDb.client = client;
 
 export const db = drizzle(client, { schema });
+
+// El cliente crudo, para consultas que no pasan por Drizzle (la exportación a Lynko).
+export const sqlClient = client;

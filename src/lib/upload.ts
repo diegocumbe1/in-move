@@ -17,8 +17,13 @@ const CACHE_CONTROL = '31536000';
 /** Carga el archivo en un bitmap, con fallback a <img> si el navegador no trae createImageBitmap. */
 async function decode(file: File): Promise<ImageBitmap | HTMLImageElement> {
   if (typeof createImageBitmap === 'function') {
-    // `imageOrientation` respeta el EXIF de las fotos tomadas con el móvil.
-    return createImageBitmap(file, { imageOrientation: 'from-image' });
+    try {
+      // `imageOrientation` respeta el EXIF de las fotos tomadas con el móvil.
+      return await createImageBitmap(file, { imageOrientation: 'from-image' });
+    } catch {
+      // Safari antiguo rechaza las opciones o no decodifica la foto de 24/48 MP
+      // del iPhone por memoria: se reintenta con <img>, que sí la reduce.
+    }
   }
   const url = URL.createObjectURL(file);
   try {
@@ -69,11 +74,51 @@ async function compress(file: File): Promise<{ blob: Blob; ext: string; type: st
   }
 }
 
-/** Sube la foto del deportista al bucket (comprimida) y devuelve su ruta (path). */
+/**
+ * UUID v4. `crypto.randomUUID` solo existe en contexto seguro (HTTPS/localhost)
+ * y desde iOS 15.4: al abrir la app por la IP de la red local o en un iPad
+ * antiguo no está, así que se arma con `getRandomValues`, que sí existe siempre.
+ */
+function uuid(): string {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+/** Límite de /api/photos (el de Vercel es 4.5 MB). */
+const SERVER_WEBP_MAX_BYTES = 4 * 1024 * 1024;
+
+/** Convierte a WebP en el servidor. Devuelve null si no se pudo, para subir tal cual. */
+async function uploadViaServer(blob: Blob): Promise<string | null> {
+  if (blob.size > SERVER_WEBP_MAX_BYTES) return null;
+  try {
+    const body = new FormData();
+    body.append('file', blob);
+    const response = await fetch('/api/photos', { method: 'POST', body });
+    if (!response.ok) return null;
+    const { path } = (await response.json()) as { path?: string };
+    return path ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Sube la foto del deportista al bucket (comprimida) y devuelve su ruta (path).
+ * Siempre intenta dejarla en WebP: si el navegador no sabe codificarlo
+ * (Safari en iPhone/iPad), la convierte el servidor.
+ */
 export async function uploadAthletePhoto(file: File): Promise<string> {
   const supabase = createClient();
   const { blob, ext, type } = await compress(file);
-  const path = `${crypto.randomUUID()}.${ext}`;
+  if (type !== 'image/webp') {
+    const serverPath = await uploadViaServer(blob);
+    if (serverPath) return serverPath;
+  }
+  const path = `${uuid()}.${ext}`;
   const { error } = await supabase.storage.from(PHOTO_BUCKET).upload(path, blob, {
     upsert: false,
     contentType: type,
