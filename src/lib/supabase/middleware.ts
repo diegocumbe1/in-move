@@ -1,14 +1,10 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
-const BYPASS_AUTH_LOCAL = true;
-
 // Renueva la sesion en cada request y protege la app: sin sesion -> /login.
+// No hay bypass: la subida de fotos va del navegador a Storage con políticas
+// `authenticated`, así que sin sesión falla aunque el resto de la app funcione.
 export async function updateSession(request: NextRequest) {
-  if (BYPASS_AUTH_LOCAL) {
-    return NextResponse.next({ request });
-  }
-
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
