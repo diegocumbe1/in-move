@@ -334,7 +334,7 @@ export default function MockMvpApp() {
       setPublicPreview(false);
     } catch (error) {
       console.error(error);
-      alert('No se pudo guardar el deportista. Revisa la conexión e intenta de nuevo.');
+      alert(`No se pudo guardar el deportista. Revisa la conexión e intenta de nuevo.\n\n${errorDetail(error)}`);
     }
   }
 
@@ -415,7 +415,7 @@ export default function MockMvpApp() {
       setEditOpen(false);
     } catch (error) {
       console.error(error);
-      alert('No se pudo actualizar la información del deportista.');
+      alert(`No se pudo actualizar la información del deportista.\n\n${errorDetail(error)}`);
     }
   }
 
@@ -3011,6 +3011,12 @@ function MiniStat({ label, value, unit }: { label: string; value: string | numbe
 }
 
 
+/** Mensaje técnico corto para las alertas: sin él, desde el celular no hay forma de saber qué falló. */
+function errorDetail(error: unknown): string {
+  if (error instanceof Error) return `Detalle: ${error.name}: ${error.message}`;
+  return `Detalle: ${String(error)}`;
+}
+
 type NewAthleteFormData = {
   name: string;
   document: string;
@@ -3118,6 +3124,8 @@ function CreateAthleteModal({
     if (!canCreate || submitting) return;
     setSubmitting(true);
     await onCreate(form);
+    // Si falló, el modal sigue abierto: el botón debe volver a habilitarse para reintentar.
+    setSubmitting(false);
   }
 
   return (
