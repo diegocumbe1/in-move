@@ -1,5 +1,7 @@
 'use client';
 
+import { isAuthRetryableFetchError } from '@supabase/supabase-js';
+import { notifySessionExpired, SESSION_EXPIRED_MESSAGE } from '@/lib/session-expired';
 import { createClient } from '@/lib/supabase/client';
 
 const PHOTO_BUCKET = 'athlete-photos';
@@ -124,6 +126,15 @@ export async function uploadAthletePhoto(file: File): Promise<string> {
     contentType: type,
     cacheControl: CACHE_CONTROL,
   });
-  if (error) throw error;
+  if (error) {
+    // Sin sesión, Storage solo responde un error de RLS (y es otro origen: el guard
+    // no lo ve). Se confirma con Auth para no tomar otros fallos por sesión expirada.
+    const { data, error: authError } = await supabase.auth.getUser();
+    if (!data.user && !isAuthRetryableFetchError(authError)) {
+      notifySessionExpired();
+      throw new Error(SESSION_EXPIRED_MESSAGE);
+    }
+    throw error;
+  }
   return path;
 }

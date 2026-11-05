@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Sora, Plus_Jakarta_Sans, JetBrains_Mono } from 'next/font/google';
 import { RegisterSW } from '@/components/pwa/register-sw';
+import { SessionExpiredGuard } from '@/components/session-expired-guard';
 import './globals.css';
 
 /* Tipografías (self-hosted por next/font — sin llamadas externas en runtime). */
@@ -67,6 +68,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body className={`${display.variable} ${body.variable} ${mono.variable}`}>
+        {/* Antes de children: sus efectos corren primero y ya cubren las llamadas iniciales de la página. */}
+        <SessionExpiredGuard />
         {children}
         <RegisterSW />
       </body>

@@ -7,6 +7,8 @@ import { StatusBadge } from '@/components/premium';
 import { Avatar, SafetyModal, SectionHeader } from '@/components/admin-ui';
 import { ScaleCellView } from '@/components/scale-cell';
 import * as groupApi from '@/lib/group-actions';
+import { useDraftState } from '@/lib/session-draft';
+import { isSessionExpiredError } from '@/lib/session-expired';
 import { athleteCells } from '@/lib/group-cells';
 import { GROUP_COLUMNS, compareCells, groupTableEnabled, rankByScore, type GroupColumnKey, type GroupPublicSettings } from '@/lib/group-columns';
 import type { CatalogOption } from '@/lib/actions';
@@ -80,7 +82,7 @@ export function GroupsView({
     setSelectedIdState(groupId);
     onSelectGroup(groupId);
   };
-  const [formGroup, setFormGroup] = useState<GroupSummary | 'new' | null>(null);
+  const [formGroup, setFormGroup] = useDraftState<GroupSummary | 'new' | null>('nav.formGroup', () => null);
 
   const labelById = useMemo(() => new Map(catalogOptions.map((option) => [option.id, option.label])), [catalogOptions]);
   const optionsFor = (key: GroupFlagKey) => catalogOptions.filter((option) => option.kind === GROUP_FLAG_CATALOG[key]);
@@ -837,7 +839,7 @@ function GroupFormModal({
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
-  const [form, setForm] = useState({
+  const [form, setForm] = useDraftState(`group:${group?.id ?? 'new'}`, () => ({
     name: group?.name ?? '',
     description: group?.description ?? '',
     color: group?.color ?? DEFAULT_COLOR,
@@ -847,7 +849,7 @@ function GroupFormModal({
     startsOn: group?.startsOn ?? '',
     endsOn: group?.endsOn ?? '',
     responsible: { name: '', role: '', phone: '', email: '', ...(group?.responsible ?? {}) } as GroupResponsible,
-  });
+  }));
   const [saving, setSaving] = useState(false);
   const setResponsible = (patch: Partial<GroupResponsible>) => setForm({ ...form, responsible: { ...form.responsible, ...patch } });
 
@@ -874,7 +876,7 @@ function GroupFormModal({
       await onSaved();
     } catch (error) {
       console.error(error);
-      alert('No se pudo guardar el grupo.');
+      if (!isSessionExpiredError(error)) alert('No se pudo guardar el grupo.');
     } finally {
       setSaving(false);
     }
