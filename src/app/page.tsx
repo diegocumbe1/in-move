@@ -65,6 +65,8 @@ import { DEFAULT_PLAN_LIMITS, type GroupSummary, type PlanLimits } from '@/lib/g
 import { DEFAULT_GROUP_PUBLIC_SETTINGS, GROUP_COLUMNS, PUBLIC_IDENTITIES, type GroupColumnKey, type GroupPublicSettings } from '@/lib/group-columns';
 import * as api from '@/lib/actions';
 import { uploadAthletePhoto } from '@/lib/upload';
+import { useDraftState } from '@/lib/session-draft';
+import { isSessionExpiredError } from '@/lib/session-expired';
 import { createClient as createSupabaseClient } from '@/lib/supabase/client';
 import type { AssessmentDraftInput } from '@/lib/form-types';
 import { classifyCmj, classifySitReach, jumpAverage } from '@/lib/scales';
@@ -221,20 +223,20 @@ const classifyRestingHr = (value: number | null) => {
 
 export default function MockMvpApp() {
   const router = useRouter();
-  const [view, setView] = useState<ViewId>('athletes');
+  const [view, setView] = useDraftState<ViewId>('nav.view', () => 'athletes');
   const [mockAthletes, setMockAthletes] = useState<Athlete[]>([]);
   const [settings, setSettings] = useState<ProductSettings>(defaultSettings);
-  const [selectedId, setSelectedId] = useState<string>('');
+  const [selectedId, setSelectedId] = useDraftState<string>('nav.selectedId', () => '');
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('Todos');
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isCreateOpen, setIsCreateOpen] = useDraftState('nav.isCreateOpen', () => false);
   const [isAdmin] = useState(true); // sesión ya validada por el middleware
   const [publicPreview, setPublicPreview] = useState(false);
   const [publicAssessment, setPublicAssessment] = useState<Assessment | null>(null);
   const [loading, setLoading] = useState(true);
-  const [detailId, setDetailId] = useState<string | null>(null);
-  const [formAssessment, setFormAssessment] = useState<Assessment | null>(null);
-  const [editOpen, setEditOpen] = useState(false);
+  const [detailId, setDetailId] = useDraftState<string | null>('nav.detailId', () => null);
+  const [formAssessment, setFormAssessment] = useDraftState<Assessment | null>('nav.formAssessment', () => null);
+  const [editOpen, setEditOpen] = useDraftState('nav.editOpen', () => false);
   const [fichaTheme, setFichaThemeState] = useState<FichaTheme>('light');
   const [fichaSectionsByCategory, setFichaSectionsByCategory] = useState<FichaSectionsConfig>({});
   const [agilityDefaultTest, setAgilityDefaultTestState] = useState<AgilityTest>(DEFAULT_AGILITY_TEST);
@@ -245,9 +247,9 @@ export default function MockMvpApp() {
   const [groupsReady, setGroupsReady] = useState(false);
   const [catalogOptions, setCatalogOptions] = useState<api.CatalogOption[]>([]);
   // A dónde vuelve "Volver" desde el detalle del deportista (listado o grupo).
-  const [detailReturnView, setDetailReturnView] = useState<ViewId>('athletes');
+  const [detailReturnView, setDetailReturnView] = useDraftState<ViewId>('nav.detailReturnView', () => 'athletes');
   // Grupo abierto en el módulo Grupos (también al llegar desde el panel o al volver del detalle).
-  const [focusGroupId, setFocusGroupId] = useState<string | null>(null);
+  const [focusGroupId, setFocusGroupId] = useDraftState<string | null>('nav.focusGroupId', () => null);
 
   // Tema de la plataforma (panel admin): preferencia por dispositivo en localStorage.
   useEffect(() => {
@@ -334,6 +336,7 @@ export default function MockMvpApp() {
       setPublicPreview(false);
     } catch (error) {
       console.error(error);
+      if (isSessionExpiredError(error)) return;
       alert(`No se pudo guardar el deportista. Revisa la conexión e intenta de nuevo.\n\n${errorDetail(error)}`);
     }
   }
@@ -415,6 +418,7 @@ export default function MockMvpApp() {
       setEditOpen(false);
     } catch (error) {
       console.error(error);
+      if (isSessionExpiredError(error)) return;
       alert(`No se pudo actualizar la información del deportista.\n\n${errorDetail(error)}`);
     }
   }
@@ -1608,7 +1612,8 @@ function AssessmentView({
 }) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [draft, setDraft] = useState<AssessmentDraft>(() => {
+  const draftKey = `assessment:${athlete.id}:${assessmentId ?? 'new'}`;
+  const [draft, setDraft] = useDraftState<AssessmentDraft>(draftKey, () => {
     const s = (v: number | string | null | undefined) => (v == null || v === '' ? '' : String(v));
     const a = assessment.raw?.anthropometry ?? {};
     const c = assessment.raw?.cardio ?? {};
@@ -1648,7 +1653,7 @@ function AssessmentView({
       notes: assessment.profile?.notes || '', plan: assessment.raw?.plan ?? '',
     };
   });
-  const [selectedSprintDistances, setSelectedSprintDistances] = useState<SprintDistance[]>(() => {
+  const [selectedSprintDistances, setSelectedSprintDistances] = useDraftState<SprintDistance[]>(`${draftKey}:sprints`, () => {
     const p = assessment.raw?.performance ?? {};
     const selected: SprintDistance[] = [];
     if (p.velocidad10mS != null) selected.push('10');
@@ -1834,7 +1839,7 @@ function AssessmentView({
                   setTimeout(() => setSaved(false), 2500);
                 } catch (error) {
                   console.error(error);
-                  alert('No se pudo guardar la valoración.');
+                  if (!isSessionExpiredError(error)) alert('No se pudo guardar la valoración.');
                 } finally {
                   setSaving(false);
                 }
@@ -3028,6 +3033,8 @@ type NewAthleteFormData = {
   position: string;
   photoUrl?: string;
   photoFile?: File | null;
+  /** Borrador recuperado tras expirar la sesión: la foto elegida no se conserva y hay que volver a elegirla. */
+  photoLost?: boolean;
   /** Grupos seleccionados (Fase 2). undefined = el módulo de grupos no está activo. */
   groupIds?: string[];
 };
@@ -3099,7 +3106,7 @@ function CreateAthleteModal({
   onClose: () => void;
   onCreate: (data: NewAthleteFormData) => void;
 }) {
-  const [form, setForm] = useState<NewAthleteFormData>({
+  const [form, setForm] = useDraftState<NewAthleteFormData>(`athlete:${initial?.id ?? 'new'}`, () => ({
     name: initial?.name ?? '',
     document: initial?.document ?? '',
     birthDate: initial?.birthDate ?? '2011-01-01',
@@ -3111,7 +3118,13 @@ function CreateAthleteModal({
     position: initial?.position ?? '',
     photoUrl: initial?.photoUrl,
     groupIds: groups ? initial?.groupIds ?? [] : undefined,
-  });
+  }), (current) => ({
+    // Un File no se puede serializar y su vista previa (blob:) no sobrevive a la recarga.
+    ...current,
+    photoFile: undefined,
+    photoUrl: initial?.photoUrl,
+    photoLost: Boolean(current.photoFile || current.photoLost),
+  }));
   const [fileName, setFileName] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const canCreate = form.name.trim().length > 2 && form.document.trim().length > 4;
@@ -3155,7 +3168,7 @@ function CreateAthleteModal({
               )}
             </div>
             <span className="mt-3 block text-sm font-semibold text-foreground">Foto del deportista</span>
-            <span className="mt-1 block max-w-[140px] truncate text-xs text-muted-foreground">{fileName || 'Storage simulado'}</span>
+            <span className="mt-1 block max-w-[140px] truncate text-xs text-muted-foreground">{form.photoLost && !form.photoFile ? 'Vuelve a elegir la foto' : fileName || 'Storage simulado'}</span>
             <PhotoCaptureControls
               onFileName={setFileName}
               onPhoto={(photoUrl) => update('photoUrl', photoUrl)}
@@ -3690,7 +3703,7 @@ function SettingsList({
       await onReload();
     } catch (error) {
       console.error(error);
-      alert('No se pudo guardar el cambio.');
+      if (!isSessionExpiredError(error)) alert('No se pudo guardar el cambio.');
     } finally {
       setBusy(false);
     }

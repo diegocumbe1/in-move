@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { SESSION_EXPIRED_MESSAGE } from '@/lib/session-expired';
 
 // Renueva la sesion en cada request y protege la app: sin sesion -> /login.
 // No hay bypass: la subida de fotos va del navegador a Storage con políticas
@@ -44,7 +45,21 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith('/grupo/') ||
     pathname.startsWith('/api/integrations/');
 
+  // Los Server Actions se envían por POST a la URL actual, sea cual sea: ninguno
+  // se ejecuta sin sesión, ni desde rutas públicas. Un redirect aquí no sirve: el
+  // fetch lo seguiría hasta el HTML de /login y Next fallaría con un error genérico.
+  // Con 401 + text/plain, Next relanza este texto y SessionExpiredGuard abre el modal.
+  if (!user && request.method === 'POST' && request.headers.has('next-action')) {
+    return new NextResponse(SESSION_EXPIRED_MESSAGE, {
+      status: 401,
+      headers: { 'content-type': 'text/plain' },
+    });
+  }
+
   if (!user && !isPublic) {
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json({ error: SESSION_EXPIRED_MESSAGE }, { status: 401 });
+    }
     const url = request.nextUrl.clone();
     url.pathname = '/login';
     return NextResponse.redirect(url);
